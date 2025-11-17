@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>silent check sso</title>
+  </head>
+  <body>
+    <!--
+      This page is intentionally minimal. keycloak-js will load this URL inside an iframe
+      when performing the silent check-sso flow. keycloak-js expects this page to post
+      the full URL (including fragment) back to the parent window as a STRING via
+      postMessage. Sending arbitrary objects breaks keycloak-js's message parser.
+    -->
+    <script>
+      try {
+        // Send the full URL (string) back to the parent so keycloak-js can parse the
+        // fragment (e.g. error=login_required). Use '*' as targetOrigin so it works
+        // in local dev; keycloak-js will validate the content.
+        if (window.parent && window.location && window.location.href) {
+          window.parent.postMessage(window.location.href, '*');
+        }
+      } catch (e) {
+        // ignore
+      }
+    </script>
+  </body>
+</html>

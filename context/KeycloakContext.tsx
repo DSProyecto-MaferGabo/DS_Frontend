@@ -18,10 +18,16 @@ export const KeycloakProvider = ({ children }: { children: ReactNode }) => {
   const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
+    // pass a callback so the service can notify us when auth state changes
     keycloak.init((authStatus) => {
+        console.debug('[KeycloakContext] auth change:', authStatus);
         setAuthenticated(authStatus);
         setProfile(keycloak.profile);
     }).then(() => {
+      setIsInitializing(false);
+    }).catch((err) => {
+      console.error('[KeycloakContext] init error:', err);
+      // Ensure the app doesn't stay in a perpetual loading state
       setIsInitializing(false);
     });
   }, []);
