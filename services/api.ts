@@ -1,7 +1,7 @@
 
 import keycloak from './keycloakService';
 
-const BASE_URL = 'http://localhost:4000';
+const BASE_URL = import.meta.env.VITE_USERS_API_URL || 'http://localhost:5224';
 
 const api = {
   get: async <T,>(path: string): Promise<T> => {
@@ -41,3 +41,8 @@ async function request<T,>(path: string, method: string, body?: any): Promise<T>
 }
 
 export default api;
+
+// Convenience helper to create or sync a user in the Users-service from an auth provider
+export async function createUserFromAuth(payload: { Email: string; Role: string[]; DisplayName?: string; PhotoURL?: string; }) {
+  return api.post('/User/from-auth', payload);
+}
