@@ -1,0 +1,5 @@
+{
+  "name": "DS-Frontend - Plataforma de Eventos",
+  "description": "Una plataforma integral para la gestión de eventos, enfocada en una experiencia de usuario moderna y elegante. Esta fase inicial incluye módulos para la visualización de eventos, gestión de reservaciones y perfiles de usuario, con un panel de administración completo.",
+  "requestFramePermissions": []
+}

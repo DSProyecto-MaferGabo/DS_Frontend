@@ -1,0 +1,71 @@
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { useKeycloak } from './hooks/useKeycloak';
+import { ProtectedRoute } from './components/ProtectedRoute';
+
+// Layouts
+import { ClientLayout } from './layouts/ClientLayout';
+import { AdminLayout } from './layouts/AdminLayout';
+
+// Client Pages
+import { HomePage } from './pages/client/HomePage';
+import { EventDetailPage } from './pages/client/EventDetailPage';
+import { SeatSelectionPage } from './pages/client/SeatSelectionPage';
+import { CheckoutPage } from './pages/client/CheckoutPage';
+import { UserProfile } from './pages/client/UserProfile';
+
+// Admin Pages
+import { EventManagementPage } from './pages/admin/EventManagementPage';
+import { EventCreationPage } from './pages/admin/EventCreationPage';
+import { UserManagementPage } from './pages/admin/UserManagementPage';
+import { ReservationManagementPage } from './pages/admin/ReservationManagementPage';
+import { ComingSoonPage } from './pages/admin/ComingSoonPage';
+
+export const Router = () => {
+    const { isInitializing } = useKeycloak();
+
+    if (isInitializing) {
+        return <div className="flex items-center justify-center h-screen"><p className="text-xl">Cargando Plataforma...</p></div>;
+    }
+
+    return (
+        <Routes>
+            {/* Client and Public Routes */}
+            <Route path="/" element={<ClientLayout />}>
+                <Route index element={<HomePage />} />
+                <Route path="evento/:id" element={<EventDetailPage />} />
+                
+                {/* FIX: Explicitly pass children to ProtectedRoute to fix type error */}
+                <Route path="evento/:id/asientos" element={
+                    <ProtectedRoute loginRequired children={<SeatSelectionPage />} />
+                } />
+                 {/* FIX: Explicitly pass children to ProtectedRoute to fix type error */}
+                 <Route path="checkout" element={
+                    <ProtectedRoute loginRequired children={<CheckoutPage />} />
+                } />
+                {/* FIX: Explicitly pass children to ProtectedRoute to fix type error */}
+                <Route path="perfil" element={
+                    <ProtectedRoute loginRequired children={<UserProfile />} />
+                } />
+            </Route>
+            
+            {/* Admin Routes */}
+            {/* FIX: Explicitly pass children to ProtectedRoute to fix type error */}
+            <Route path="/admin" element={
+                <ProtectedRoute roles={['organizador', 'administrador']} children={<AdminLayout />} />
+            }>
+                <Route index element={<Navigate to="eventos" replace />} />
+                <Route path="eventos" element={<EventManagementPage />} />
+                <Route path="eventos/crear" element={<EventCreationPage />} />
+                <Route path="usuarios" element={<UserManagementPage />} />
+                <Route path="reservaciones" element={<ReservationManagementPage />} />
+                <Route path="pagos" element={<ComingSoonPage />} />
+                <Route path="reportes" element={<ComingSoonPage />} />
+                <Route path="foros" element={<ComingSoonPage />} />
+            </Route>
+
+            {/* Fallback Route */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+    );
+}
