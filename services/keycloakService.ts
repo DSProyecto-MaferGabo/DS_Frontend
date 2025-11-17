@@ -107,6 +107,25 @@ class KeycloakService {
     this.kc.logout();
   }
 
+  // expose register to redirect user to Keycloak registration page
+  register() {
+    console.debug('[Keycloak] register() called, redirecting to registration page');
+    try {
+      // @ts-ignore
+      if (typeof this.kc.register === 'function') {
+        // keycloak-js will redirect the browser to the registration page
+        // keep compatibility if register is not present
+        // @ts-ignore
+        this.kc.register();
+        return;
+      }
+    } catch (err) {
+      console.warn('[Keycloak] register() failed:', err);
+    }
+    // fallback: call login (some setups expose registration via login with action)
+    this.kc.login();
+  }
+
   hasRealmRole(role: string): boolean {
     try {
       const roles = (this.kc.tokenParsed as any)?.realm_access?.roles || [];

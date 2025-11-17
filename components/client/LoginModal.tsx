@@ -20,6 +20,13 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
     onClose();
   };
 
+  const handleRegister = () => {
+    // redirect to Keycloak registration page
+    // this requires 'User Registration' to be enabled in the realm
+    keycloakInstance.register();
+    onClose();
+  };
+
   return (
     <div 
       className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 transition-opacity"
@@ -36,12 +43,9 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
             <h2 className="text-2xl font-bold text-white mb-2">Inicia Sesión</h2>
             <p className="text-gray-400 mb-6">Para comprar entradas y acceder a tu perfil.</p>
             <div className="space-y-4">
-                 <Button onClick={() => handleLogin(false)} variant="primary" size="lg" className="w-full">
-                    Iniciar Sesión con Keycloak
-                </Button>
-                <Button onClick={() => handleLogin(true)} variant="secondary" size="sm" className="w-full">
-                    (Acceso para Administradores)
-                </Button>
+         <Button onClick={() => handleLogin(false)} variant="primary" size="lg" className="w-full">
+          Iniciar Sesión con Keycloak
+        </Button>
             </div>
         </div>
       </div>
