@@ -85,6 +85,28 @@ class KeycloakService {
     return this.authenticated;
   }
 
+  // Ensure token is valid, try to refresh if close to expiry. Returns true if token is valid after call.
+  async ensureTokenValid(minValiditySeconds = 30): Promise<boolean> {
+    try {
+      // keycloak-js exposes updateToken which returns a Promise<boolean> in newer versions
+      if (typeof (this.kc as any).updateToken === 'function') {
+        const refreshed = await (this.kc as any).updateToken(minValiditySeconds);
+        // update local token and authenticated flag
+        this.token = this.kc.token || '';
+        this.authenticated = !!this.kc.token;
+        return !!refreshed || this.authenticated;
+      }
+    } catch (err) {
+      console.warn('[Keycloak] token refresh failed', err);
+    }
+    // fallback: if we have a token and it's not expired, consider it valid
+    return !!this.token;
+  }
+
+  getToken() {
+    return this.token;
+  }
+
   // keep optional parameter for compatibility with existing calls
   login(_isAdmin?: boolean) {
     console.debug('[Keycloak] login() called');

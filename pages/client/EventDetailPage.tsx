@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import api from '../../services/api';
+import eventsApi from '../../services/eventsApi';
 import type { Evento } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { CalendarIcon, MapPinIcon } from '@heroicons/react/24/solid';
@@ -15,7 +15,7 @@ export const EventDetailPage = () => {
       if (!id) return;
       setLoading(true);
       try {
-        const data = await api.get<Evento>(`/eventos/${id}`);
+        const data = await eventsApi.getEvent(Number(id));
         setEvento(data);
       } catch (error) {
         console.error("Error fetching event details:", error);

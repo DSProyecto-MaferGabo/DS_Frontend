@@ -17,6 +17,9 @@ import { UserProfile } from './pages/client/UserProfile';
 // Admin Pages
 import { EventManagementPage } from './pages/admin/EventManagementPage';
 import { EventCreationPage } from './pages/admin/EventCreationPage';
+import { EventEditPage } from './pages/admin/EventEditPage';
+import { StageManagementPage } from './pages/admin/StageManagementPage';
+import { PromotionManagementPage } from './pages/admin/PromotionManagementPage';
 import { UserManagementPage } from './pages/admin/UserManagementPage';
 import { ReservationManagementPage } from './pages/admin/ReservationManagementPage';
 import { ComingSoonPage } from './pages/admin/ComingSoonPage';
@@ -57,7 +60,10 @@ export const Router = () => {
                 <Route index element={<Navigate to="eventos" replace />} />
                 <Route path="eventos" element={<EventManagementPage />} />
                 <Route path="eventos/crear" element={<EventCreationPage />} />
+                <Route path="eventos/:id/editar" element={<EventEditPage />} />
                 <Route path="usuarios" element={<UserManagementPage />} />
+                <Route path="escenarios" element={<StageManagementPage />} />
+                <Route path="promociones" element={<PromotionManagementPage />} />
                 <Route path="reservaciones" element={<ReservationManagementPage />} />
                 <Route path="pagos" element={<ComingSoonPage />} />
                 <Route path="reportes" element={<ComingSoonPage />} />

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { EventCard } from '../../components/client/EventCard';
-import api from '../../services/api';
+import eventsApi from '../../services/eventsApi';
 import type { Evento } from '../../types';
 
 export const HomePage = () => {
@@ -11,7 +11,7 @@ export const HomePage = () => {
   useEffect(() => {
     const fetchEventos = async () => {
       try {
-        const data = await api.get<Evento[]>('/eventos');
+        const data = await eventsApi.getEvents();
         setEventos(data);
       } catch (err) {
         setError('No se pudieron cargar los eventos. Intente de nuevo más tarde.');

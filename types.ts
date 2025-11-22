@@ -5,6 +5,7 @@ export interface Evento {
   fecha: string;
   ubicacion: string;
   posterUrl: string;
+  stageId?: number;
 }
 
 export interface Escenario {

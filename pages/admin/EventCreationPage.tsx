@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import eventsApi from '../../services/eventsApi';
 // FIX: Import Escenario type
 import type { Evento, Zona, Asiento, Escenario } from '../../types';
 import { Button } from '../../components/ui/Button';
@@ -27,34 +27,23 @@ export const EventCreationPage = () => {
   const handleSaveEvent = async () => {
     try {
         // This is a simplified simulation for json-server
-        // 1. Save Event
-        // FIX: Add generic type to api.post to get a typed result.
-        const newEvent = await api.post<Evento>('/eventos', eventInfo);
-        
-        // 2. Save Escenario (Stage)
-        // FIX: Add generic type to api.post to get a typed result.
-        const newEscenario = await api.post<Escenario>('/escenarios', { eventoId: newEvent.id, nombre: eventInfo.ubicacion });
+        // 1. Create Escenario (Stage) first so we can reference its id from Event and Seats
+        const newEscenario = await eventsApi.createStage({ name: eventInfo.ubicacion || 'Escenario Principal', peoplecapacity: 100, location: eventInfo.ubicacion || 'Ubicación' });
 
-        // 3. Save Zones
-        // FIX: Add generic type to api.post to get a typed result.
-        const savedZones = await Promise.all(zones.map(zone => 
-            api.post<Zona>('/zonas', { ...zone, escenarioId: newEscenario.id })
-        ));
+        // 2. Save Event referencing the created stage
+        const newEventResp = await eventsApi.createEvent({
+          name: eventInfo.nombre || 'Nuevo Evento',
+          description: eventInfo.descripcion || '',
+          date: (eventInfo.fecha || new Date().toISOString().slice(0,10)),
+          stageId: newEscenario.id,
+        });
 
-        // 4. Save Seats
+        // 3. Save Seats -> map to backend AddSeatDto { row_number, seatnumber, zone, StageId }
         await Promise.all(seats.map(seat => {
-            // FIX: Cast seat.zonaId to 'any' because it temporarily holds a string name, not a number ID.
-            const zone = savedZones.find(z => z.nombre === (seat.zonaId as any)); // Here zonaId is temporarily the name
-            if (!zone) {
-                console.error('Zone not found for seat', seat);
-                return Promise.resolve();
-            }
-            return api.post('/asientos', { 
-                ...seat, 
-                escenarioId: newEscenario.id, 
-                zonaId: zone.id,
-                id: `${newEscenario.id}-${seat.fila}-${seat.numero}` // Create a unique ID
-            });
+            const zoneName = (seat.zonaId as any) || (zones[0]?.nombre) || 'General';
+            const row = seat.fila || 'R1';
+            const number = parseInt((seat.numero as any) || '1');
+            return eventsApi.createSeat({ row_number: row, seatnumber: number, zone: zoneName, StageId: newEscenario.id });
         }));
 
         alert('¡Evento creado con éxito!');

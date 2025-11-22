@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import eventsApi from '../../services/eventsApi';
 // FIX: Import the Escenario type.
 import type { Evento, Asiento, Zona, Escenario } from '../../types';
 import { Button } from '../../components/ui/Button';
@@ -19,20 +19,18 @@ export const SeatSelectionPage = () => {
       if (!eventoId) return;
       setLoading(true);
       try {
-        const [eventoData, escenariosData] = await Promise.all([
-          api.get<Evento>(`/eventos/${eventoId}`),
-          // FIX: Add generic type to api.get to correctly type escenariosData.
-          api.get<Escenario[]>(`/escenarios?eventoId=${eventoId}`),
-        ]);
-        setEvento(eventoData);
-        if (escenariosData.length > 0) {
-          const escenarioId = escenariosData[0].id;
-          const [asientosData, zonasData] = await Promise.all([
-            api.get<Asiento[]>(`/asientos?escenarioId=${escenarioId}`),
-            api.get<Zona[]>(`/zonas?escenarioId=${escenarioId}`),
-          ]);
-          setAsientos(asientosData);
-          setZonas(zonasData);
+        const eventDto = await eventsApi.getEvent(Number(eventoId));
+        setEvento(eventDto);
+        const stageId = eventDto.stageId;
+        if (stageId) {
+          const { seats: mappedSeats, zonas: mappedZonas } = await eventsApi.getSeats(stageId);
+          setAsientos(mappedSeats);
+          setZonas(mappedZonas);
+        } else {
+          // fallback: get all seats
+          const { seats: mappedSeats, zonas: mappedZonas } = await eventsApi.getSeats();
+          setAsientos(mappedSeats);
+          setZonas(mappedZonas);
         }
       } catch (error) {
         console.error("Error fetching seat data:", error);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api';
+import eventsApi from '../../services/eventsApi';
 import type { Evento } from '../../types';
 import { Button } from '../../components/ui/Button';
 
@@ -12,7 +12,7 @@ export const EventManagementPage = () => {
   const fetchEventos = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get<Evento[]>('/eventos');
+      const data = await eventsApi.getEvents();
       setEventos(data);
     } catch (error) {
       console.error('Error fetching eventos:', error);
@@ -28,10 +28,17 @@ export const EventManagementPage = () => {
   const handleDelete = async (id: number) => {
     if (window.confirm('¿Estás seguro de que quieres eliminar este evento? Esta acción no se puede deshacer.')) {
       try {
-        await api.delete(`/eventos/${id}`);
+        await eventsApi.deleteEvent(id);
         fetchEventos();
       } catch (error) {
         console.error('Error deleting evento:', error);
+        if ((error as Error).message === 'SESSION_EXPIRED') {
+          if (confirm('Tu sesión ha expirado. ¿Quieres iniciar sesión de nuevo?')) {
+            // redirect to keycloak login
+            (await import('../../services/keycloakService')).default.login();
+          }
+          return;
+        }
       }
     }
   };
@@ -64,7 +71,7 @@ export const EventManagementPage = () => {
                 <td className="py-3 px-4">{evento.ubicacion}</td>
                 <td className="py-3 px-4">
                   <div className="flex space-x-2">
-                    <Button variant="ghost" size="sm" disabled>Editar</Button>
+                    <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/eventos/${evento.id}/editar`)}>Editar</Button>
                     <Button onClick={() => handleDelete(evento.id)} variant="danger" size="sm">Eliminar</Button>
                   </div>
                 </td>
