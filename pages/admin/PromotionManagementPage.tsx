@@ -49,7 +49,12 @@ export const PromotionManagementPage = () => {
       <div className="mb-6 flex gap-2">
         <input value={code} onChange={e => setCode(e.target.value)} placeholder="Código" className="p-2 bg-base-300 rounded" />
         <input type="number" value={discount} onChange={e => setDiscount(parseInt(e.target.value || '0'))} className="p-2 bg-base-300 rounded w-32" />
-        <Button onClick={handleCreate}>Crear</Button>
+        <Button onClick={handleCreate} variant="primary">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Crear
+        </Button>
       </div>
       <ul className="space-y-2">
         {promos.map(p => (
@@ -70,13 +75,29 @@ export const PromotionManagementPage = () => {
             <div className="flex gap-2">
               {editingId === p.id ? (
                 <>
-                  <Button variant="primary" onClick={() => saveEdit(p.id)}>Guardar</Button>
-                  <Button variant="ghost" onClick={cancelEdit}>Cancelar</Button>
+                  <Button variant="primary" size="sm" onClick={() => saveEdit(p.id)} aria-label="Guardar promoción">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={cancelEdit} aria-label="Cancelar edición">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </Button>
                 </>
               ) : (
                 <>
-                  <Button variant="ghost" onClick={() => startEdit(p)}>Editar</Button>
-                  <Button variant="danger" onClick={() => handleDelete(p.id)}>Eliminar</Button>
+                  <Button variant="ghost" size="sm" onClick={() => startEdit(p)} aria-label="Editar promoción">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M4 13.5V19h5.5L19.5 8.999l-5.5-5.5L4 13.5z" />
+                    </svg>
+                  </Button>
+                  <Button variant="danger" size="sm" onClick={() => handleDelete(p.id)} aria-label="Eliminar promoción">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6" />
+                    </svg>
+                  </Button>
                 </>
               )}
             </div>

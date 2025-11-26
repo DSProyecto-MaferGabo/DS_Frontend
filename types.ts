@@ -6,6 +6,8 @@ export interface Evento {
   ubicacion: string;
   posterUrl: string;
   stageId?: number;
+  hora?: string | null;
+  categoryId?: number | null;
 }
 
 export interface Escenario {

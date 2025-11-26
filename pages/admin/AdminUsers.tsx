@@ -11,7 +11,7 @@ export const AdminUsers = () => {
   const fetchUsuarios = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get<Usuario[]>('/usuarios');
+  const data = await api.get<Usuario[]>('/User');
       setUsuarios(data);
     } catch (error) {
       console.error('Error fetching usuarios:', error);
@@ -51,9 +51,31 @@ export const AdminUsers = () => {
                 <td className="py-3 px-4">{usuario.email}</td>
                 <td className="py-3 px-4">
                   <div className="flex space-x-2">
-                    <Button variant="ghost" size="sm" disabled>Editar</Button>
-                    <Button variant="danger" size="sm" disabled>Eliminar</Button>
-                  </div>
+                      <Button variant="ghost" size="sm" onClick={async () => {
+                        const newName = window.prompt('Nuevo nombre', usuario.nombre);
+                        const newEmail = window.prompt('Nuevo email', usuario.email);
+                        if (!newName || !newEmail) return;
+                        try {
+                          await api.put(`/User/${usuario.id}`, { Name: newName, Email: newEmail, Active: true, RoleId: (usuario as any).roleId || 1 });
+                          // refresh list
+                          fetchUsuarios();
+                          alert('Usuario actualizado');
+                        } catch (err: any) {
+                          console.error('Update failed', err);
+                          alert(`Update failed: ${err.status || ''} ${JSON.stringify(err.body || err.message)}`);
+                        }
+                      }}>Editar</Button>
+                      <Button variant="danger" size="sm" onClick={async () => {
+                        if (!window.confirm(`Eliminar usuario ${usuario.email}?`)) return;
+                        try {
+                          await api.delete(`/User/${usuario.id}`);
+                          setUsuarios(prev => prev.filter(u => u.id !== usuario.id));
+                        } catch (err: any) {
+                          console.error('Delete failed', err);
+                          alert(`Delete failed: ${err.status || ''} ${JSON.stringify(err.body || err.message)}`);
+                        }
+                      }}>Eliminar</Button>
+                    </div>
                 </td>
               </tr>
             ))}

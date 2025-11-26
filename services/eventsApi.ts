@@ -46,26 +46,62 @@ function mapEvent(dto: any) {
     nombre: dto.name,
     descripcion: dto.description,
     fecha: dto.date, // ISO string (DateOnly -> yyyy-MM-dd)
-    ubicacion: `Escenario ${dto.stageId}`,
+    hora: dto.time ?? dto.Time ?? null,
+    // Prefer an explicit location from the DTO when present; avoid defaulting to `Escenario ${stageId}`
+    ubicacion: dto.location ?? dto.ubicacion ?? '',
     posterUrl: `https://picsum.photos/seed/event-${dto.id}/800/500`,
     stageId: dto.stageId,
+  // keep category information if present so frontend can filter by category
+  categoryId: dto.categoryId ?? dto.CategoryId ?? dto.category?.id ?? dto.category?.Id ?? null,
   };
 }
 
 export default {
   getEvents: async () => {
     const data = await request<Json[]>('/Events');
-    return data.map(mapEvent);
+    // Fetch stages once to enrich events with stage location when DTO doesn't provide a location
+    let stages: any[] = [];
+    try {
+      stages = await request<Json[]>('/Stage');
+    } catch (e) {
+      console.warn('Could not load stages to enrich events', e);
+    }
+    const stageMap: Record<number, any> = {};
+    (stages || []).forEach(s => { stageMap[s.id ?? s.Id] = s; });
+
+    const mapped = (data || []).map((dto: any) => {
+      const evt = mapEvent(dto);
+      // prefer explicit dto location, otherwise use stage location when available
+      if (!evt.ubicacion) {
+        const s = stageMap[dto.stageId ?? dto.StageId];
+        evt.ubicacion = s?.location ?? s?.Location ?? '';
+      }
+      return evt;
+    });
+    return mapped;
+  },
+  getCategories: async () => {
+    const data = await request<Json[]>('/Category');
+    return (data || []).map((c: any) => ({ id: c.id ?? c.Id, name: c.name ?? c.Name }));
+  },
+  createCategory: async (payload: { name: string; description?: string }) => {
+    return request<Json>('/Category', 'POST', payload);
+  },
+  updateCategory: async (id: number, payload: { name: string; description?: string }) => {
+    return request<Json>(`/Category/${id}`, 'PUT', payload);
+  },
+  deleteCategory: async (id: number) => {
+    return request<Json>(`/Category/${id}`, 'DELETE');
   },
   getEvent: async (id: number) => {
     const dto = await request<Json>(`/Events/${id}`);
     return mapEvent(dto);
   },
-  createEvent: async (payload: { name: string; description: string; date: string; stageId: number }) => {
+  createEvent: async (payload: { name: string; description: string; date: string; time?: string | null; stageId: number; categoryId?: number | null }) => {
     const created = await request<Json>('/Events', 'POST', payload);
     return created; // controller returns { id, message }
   },
-  updateEvent: async (id: number, payload: { name: string; description: string; date: string; stageId: number }) => {
+  updateEvent: async (id: number, payload: { name: string; description: string; date: string; stageId: number; categoryId?: number | null }) => {
     return request(`/Events/${id}`, 'PUT', payload);
   },
   deleteEvent: async (id: number) => {
@@ -96,24 +132,31 @@ export default {
     const zoneMap: Record<string, number> = {};
     const zonas = zoneNames.map((zn, idx) => {
       zoneMap[zn] = idx + 1;
-      return { id: idx + 1, nombre: zn, precio: 100 + idx * 50, color: ['#F87171', '#60A5FA', '#34D399'][idx % 3] };
+      const sample = filtered.find(s => (s.zone ?? s.Zone) === zn);
+      const price = (sample && (sample.price ?? sample.Price)) ? (sample.price ?? sample.Price) : (100 + idx * 50);
+      return { id: idx + 1, nombre: zn, precio: price, color: ['#F87171', '#60A5FA', '#34D399'][idx % 3] };
     });
 
-    const seats = filtered.map(s => ({
-      id: (s.stageId ?? s.StageId) + '-' + (s.row_number ?? s.RowNumber ?? 'R1') + '-' + (s.seatnumber ?? s.SeatNumber ?? 1),
-      rawId: s.id,
-      escenarioId: s.stageId ?? s.StageId,
-      zonaId: zoneMap[s.zone ?? s.Zone ?? 'General'],
-      fila: s.row_number ?? s.RowNumber ?? 'R1',
-      numero: (s.seatnumber ?? s.SeatNumber ?? 1).toString(),
-      estado: 'disponible' as const,
-    }));
+    const seats = filtered.map(s => {
+      // Prefer DB-generated numeric id (Id | id) as unique identifier to avoid collisions
+      const rawId = s.id ?? s.Id ?? s.ID ?? null;
+      const uniqueId = rawId != null ? String(rawId) : `${(s.stageId ?? s.StageId)}-${(s.row_number ?? s.RowNumber ?? 'R1')}-${(s.seatnumber ?? s.SeatNumber ?? 1)}`;
+      return {
+        id: uniqueId,
+        rawId: rawId,
+        escenarioId: s.stageId ?? s.StageId,
+        zonaId: zoneMap[s.zone ?? s.Zone ?? 'General'],
+        fila: s.row_number ?? s.RowNumber ?? 'R1',
+        numero: (s.seatnumber ?? s.SeatNumber ?? 1).toString(),
+        estado: 'disponible' as const,
+      };
+    });
 
     return { seats, zonas };
   },
   // createSeat expects backend AddSeatDto shape: { row_number, seatnumber, zone, StageId }
-  createSeat: async (payload: { row_number: string; seatnumber: number; zone: string; StageId: number }) => request<Json>('/Seat', 'POST', payload),
-  updateSeat: async (id: number, payload: { row_number: string; seatnumber: number; zone: string; StageId: number }) => request<Json>(`/Seat/${id}`, 'PUT', payload),
+  createSeat: async (payload: { row_number: string; seatnumber: number; zone: string; StageId: number; price?: number }) => request<Json>('/Seat', 'POST', payload),
+  updateSeat: async (id: number, payload: { row_number: string; seatnumber: number; zone: string; StageId: number; price?: number }) => request<Json>(`/Seat/${id}`, 'PUT', payload),
   deleteSeat: async (id: number) => request<Json>(`/Seat/${id}`, 'DELETE'),
 
   // Promotions

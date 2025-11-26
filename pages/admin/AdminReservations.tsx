@@ -18,7 +18,7 @@ export const AdminReservations = () => {
             const [reservacionesData, eventosData, usuariosData] = await Promise.all([
                 api.get<Reservacion[]>('/reservaciones'),
                 api.get<Evento[]>('/eventos'),
-                api.get<Usuario[]>('/usuarios')
+                api.get<Usuario[]>('/User')
             ]);
 
             const eventosMap = new Map(eventosData.map(e => [e.id, e]));

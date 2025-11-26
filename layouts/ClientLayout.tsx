@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Navbar } from '../components/client/Navbar';
 import { useKeycloak } from '../hooks/useKeycloak';
+import { BackButton } from '../components/ui/BackButton';
 
 export const ClientLayout = () => {
   const { authenticated, keycloakInstance } = useKeycloak();
@@ -28,6 +29,7 @@ export const ClientLayout = () => {
       <Navbar />
       <main>
         <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          <div className="mb-4"><BackButton /></div>
           <Outlet />
         </div>
       </main>

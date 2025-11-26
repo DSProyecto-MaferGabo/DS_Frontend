@@ -19,25 +19,43 @@ const api = {
 };
 
 async function request<T,>(path: string, method: string, body?: any): Promise<T> {
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-  });
 
-  if (keycloak.authenticated) {
-    headers.append('Authorization', `Bearer ${keycloak.token}`);
+  // Ensure token is valid before making requests so protected endpoints receive Authorization header
+  try {
+    await keycloak.ensureTokenValid(30);
+  } catch (e) {
+    // ignore; we'll attempt request without token if refresh fails
   }
+
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const token = keycloak.getToken();
+  if (token) headers.append('Authorization', `Bearer ${token}`);
 
   const response = await fetch(`${BASE_URL}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
-
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    // try to extract error details from body
+    let errBody: any = null;
+    try {
+      const text = await response.text();
+      errBody = text ? JSON.parse(text) : text;
+    } catch (e) {
+      // not JSON
+      try { errBody = await response.text(); } catch { errBody = null; }
+    }
+
+    const error: any = new Error(`HTTP ${response.status}`);
+    error.status = response.status;
+    error.body = errBody;
+    throw error;
   }
 
-  return response.json() as Promise<T>;
+  // Some endpoints (DELETE) may return empty body
+  const txt = await response.text();
+  return txt ? (JSON.parse(txt) as T) : (null as unknown as T);
 }
 
 export default api;

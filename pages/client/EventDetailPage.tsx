@@ -29,9 +29,20 @@ export const EventDetailPage = () => {
   if (loading) return <div className="text-center p-10">Cargando evento...</div>;
   if (!evento) return <div className="text-center p-10">Evento no encontrado.</div>;
 
-  const eventDate = new Date(evento.fecha);
+  // Build date/time from separate fecha (DateOnly) and hora (HH:mm) to avoid timezone shifts
+  const buildDateTime = (fecha?: string, hora?: string | null) => {
+    if (!fecha) return new Date();
+    const [y, m, d] = fecha.split('-').map(Number);
+    if (hora) {
+      const [hh, mm] = hora.split(':').map(Number);
+      return new Date(y, m - 1, d, hh ?? 0, mm ?? 0);
+    }
+    return new Date(y, m - 1, d);
+  };
+
+  const eventDate = buildDateTime(evento.fecha, evento.hora);
   const formattedDate = eventDate.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  const formattedTime = eventDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const formattedTime = evento.hora ?? eventDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
 
   return (
     <div className="container mx-auto px-4 py-8">

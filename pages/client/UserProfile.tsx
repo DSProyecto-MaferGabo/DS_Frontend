@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import type { Reservacion, Evento } from '../../types';
 import api from '../../services/api';
+import reservationsApi from '../../services/reservationsApi';
+import eventsApi from '../../services/eventsApi';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import { Link } from 'react-router-dom';
 
@@ -15,6 +17,7 @@ export const UserProfile = () => {
   const [reservaciones, setReservaciones] = useState<PopulatedReservacion[]>([]);
   const [loading, setLoading] = useState(true);
   const { profile } = useKeycloak();
+  const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   
   useEffect(() => {
     const fetchData = async () => {
@@ -22,18 +25,74 @@ export const UserProfile = () => {
       setLoading(true);
       try {
         const [reservacionesData, eventosData] = await Promise.all([
-          api.get<Reservacion[]>(`/reservaciones?usuarioId=${profile.id}`),
-          api.get<Evento[]>(`/eventos`),
+          // fetch reservations from Reservations-service
+          reservationsApi.getReservations(profile.id),
+          // fetch events from Events-service
+          eventsApi.getEvents(),
         ]);
         
         const eventosMap = new Map(eventosData.map(e => [e.id, e]));
 
-        const populatedData = reservacionesData.map(res => ({
-            ...res,
-            evento: eventosMap.get(res.eventoId)
+        // Prefer server reservations, then include any local-only reservations (deduped by id)
+        const serverPopulated = reservacionesData.map((res: any) => ({ ...res, evento: eventosMap.get(res.eventoId) }));
+        const mapById = new Map<string, any>();
+        serverPopulated.forEach((r: any) => mapById.set(String(r.id), r));
+
+        // merge local reservations created by the mock payment flow, only if not present on server
+        try {
+          const localKey = 'local_reservaciones';
+          const local = JSON.parse(localStorage.getItem(localKey) || '[]') as any[];
+          const forUser = local.filter(r => r.usuarioId === profile.id || r.usuarioEmail === profile.email);
+          forUser.forEach(r => {
+            const key = String(r.id ?? r.reservationId ?? `${r.eventoId}:${r.fecha}`);
+            if (!mapById.has(key)) {
+              mapById.set(key, { ...r, evento: eventosMap.get(r.eventoId) });
+            }
+          });
+        } catch (e) {
+          // ignore
+        }
+
+        // Before setting reservations, enrich seat info using Events API so we can show human-readable seat labels
+        const reservationsList: any[] = Array.from(mapById.values());
+
+        // collect unique stageIds from events referenced by reservations
+        const stageIds = Array.from(new Set(reservationsList.map(r => r.evento?.stageId).filter((x: any) => !!x)));
+        const seatsByStage: Record<number, { seatMap: Record<string, any>, zonas: any[] }> = {};
+
+        await Promise.all(stageIds.map(async (stageId: number) => {
+          try {
+            const got = await eventsApi.getSeats(stageId);
+            // got = { seats, zonas }
+            const seatMap: Record<string, any> = {};
+            const zonas = got.zonas || [];
+            (got.seats || []).forEach((s: any) => {
+              // rawId should be numeric id from DB
+              const key = String(s.rawId ?? s.id ?? s.rawId);
+              const zonaInfo = zonas.find((z: any) => z.id === s.zonaId) || { nombre: s.zonaId ? String(s.zonaId) : 'General', precio: null };
+              seatMap[key] = { zona: zonaInfo.nombre, fila: s.fila, numero: s.numero, precio: zonaInfo.precio };
+            });
+            seatsByStage[stageId] = { seatMap, zonas };
+          } catch (e) {
+            console.warn('Could not fetch seats for stage', stageId, e);
+          }
         }));
 
-        setReservaciones(populatedData);
+        // attach human-readable seat labels to each reservation
+        reservationsList.forEach((r: any) => {
+          r._seatsDetailed = (r.seats || []).map((s: any) => {
+            const asientoId = String(s.asientoId ?? s.asientoId ?? s.id ?? s.rawId ?? s.asientoRawId ?? '');
+            const stageId = r.evento?.stageId;
+            if (stageId && seatsByStage[stageId] && seatsByStage[stageId].seatMap[asientoId]) {
+              const info = seatsByStage[stageId].seatMap[asientoId];
+              return { label: `${info.zona} — ${info.fila}-${info.numero}`, precio: s.precio ?? info.precio ?? 0 };
+            }
+            // fallback: try to use asientoId and precio
+            return { label: `Asiento ${asientoId}`, precio: s.precio ?? 0 };
+          });
+        });
+
+        setReservaciones(reservationsList);
 
       } catch (error) {
         console.error("Error fetching user data:", error);
@@ -46,25 +105,64 @@ export const UserProfile = () => {
 
   const renderContent = () => {
     if(loading) return <div className="text-center p-8">Cargando tus datos...</div>;
-
     switch (activeTab) {
       case 'reservaciones':
         const activas = reservaciones.filter(r => new Date(r.evento?.fecha || 0) >= new Date());
+        const toggleExpanded = (id: string | number) => setExpandedIds(prev => ({ ...prev, [String(id)]: !prev[String(id)] }));
+
         return activas.length > 0 ? (
           <div className="space-y-4">
             {activas.map(res => (
-              <div key={res.id} className="bg-base-300 p-4 rounded-lg flex flex-col sm:flex-row justify-between sm:items-center">
-                <div className="mb-2 sm:mb-0">
-                  <h3 className="font-bold text-lg text-white">{res.evento?.nombre || 'Evento Desconocido'}</h3>
-                  <p className="text-sm text-gray-400">Fecha de compra: {new Date(res.fecha).toLocaleDateString()}</p>
-                  <p className="text-sm text-gray-400">Total: ${res.total.toFixed(2)}</p>
-                </div>
-                <div className="flex items-center space-x-4">
-                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${res.estado === 'CONFIRMADA' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+              <div key={res.id} className="bg-base-300 p-4 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-lg text-white">{res.evento?.nombre || 'Evento Desconocido'}</h3>
+                    <p className="text-sm text-gray-400">Fecha de compra: {new Date(res.fecha).toLocaleDateString()}</p>
+                    <p className="text-sm text-gray-400">Total: ${Number(res.total || 0).toFixed(2)}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${res.estado === 'CONFIRMADA' || res.estado === 'paid' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
                         {res.estado}
                     </span>
-                    <Link to={`/evento/${res.eventoId}`} className="text-primary hover:underline text-sm">Ver Evento</Link>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => toggleExpanded(res.id)} className="text-sm text-primary hover:underline">{expandedIds[String(res.id)] ? 'Ocultar' : 'Detalles'}</button>
+                      <Link to={`/evento/${res.eventoId}`} className="text-primary hover:underline text-sm">Ver Evento</Link>
+                    </div>
+                  </div>
                 </div>
+
+                {expandedIds[String(res.id)] && (
+                  <div className="mt-4 border-t pt-4 text-sm text-gray-300">
+                    <h4 className="font-semibold">Información del evento</h4>
+                    <p>{res.evento?.nombre}</p>
+                    <p className="text-gray-400">{res.evento?.descripcion}</p>
+
+                    <div className="mt-3">
+                      <h4 className="font-semibold">Servicios</h4>
+                      {res.services && res.services.length > 0 ? (
+                        <ul className="list-disc pl-5">
+                          {res.services.map((s: any) => <li key={s.id}>{s.name} — ${Number(s.price).toFixed(2)}</li>)}
+                        </ul>
+                      ) : <p className="text-gray-400">No se solicitaron servicios adicionales.</p>}
+                    </div>
+
+                    <div className="mt-3">
+                      <h4 className="font-semibold">Asientos</h4>
+                      {res._seatsDetailed && res._seatsDetailed.length > 0 ? (
+                        <ul className="list-disc pl-5">
+                          {res._seatsDetailed.map((s: any, idx: number) => (
+                            <li key={idx}>{s.label} — ${Number(s.precio ?? 0).toFixed(2)}</li>
+                          ))}
+                        </ul>
+                      ) : res.seats && res.seats.length > 0 ? (
+                        // fallback to raw format if enrichment failed
+                        <ul className="list-disc pl-5">
+                          {res.seats.map((s: any, idx: number) => <li key={idx}>{s.asientoId} — ${Number(s.precio).toFixed(2)}</li>)}
+                        </ul>
+                      ) : <p className="text-gray-400">No hay asientos registrados para esta reservación.</p>}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

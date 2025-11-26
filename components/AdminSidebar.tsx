@@ -15,6 +15,7 @@ const navItems = [
   { name: 'Usuarios', href: '/admin/usuarios', icon: UsersIcon, active: true },
   { name: 'Escenarios', href: '/admin/escenarios', icon: CalendarIcon, active: true },
   { name: 'Promociones', href: '/admin/promociones', icon: TicketIcon, active: true },
+  { name: 'Categorías', href: '/admin/categorias', icon: ChatBubbleLeftRightIcon, active: true },
   { name: 'Asientos', href: '/admin/asientos', icon: TicketIcon, active: true },
   { name: 'Reservaciones', href: '/admin/reservaciones', icon: TicketIcon, active: true },
   { name: 'Pagos', href: '/admin/pagos', icon: CreditCardIcon, active: false },

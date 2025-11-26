@@ -4,6 +4,7 @@ import type { Asiento, Evento, Zona, Reservacion } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import api from '../../services/api';
+import reservationsApi from '../../services/reservationsApi';
 
 export const CheckoutPage = () => {
   const location = useLocation();
@@ -14,10 +15,12 @@ export const CheckoutPage = () => {
     selectedSeats,
     evento,
     zonasMap,
+    holdToken,
   }: {
     selectedSeats: Asiento[];
     evento: Evento;
     zonasMap: Record<number, Zona>;
+    holdToken?: string | null;
   } = location.state || { selectedSeats: [], evento: null, zonasMap: {} };
 
   if (!evento || selectedSeats.length === 0) {
@@ -30,46 +33,50 @@ export const CheckoutPage = () => {
   }
 
   const subtotal = selectedSeats.reduce((acc, seat) => acc + (zonasMap[seat.zonaId]?.precio || 0), 0);
-  const serviceFee = subtotal * 0.10; // 10% service fee
-  const total = subtotal + serviceFee;
+  const [availableServices, setAvailableServices] = React.useState<any[]>([]);
+  const [selectedServiceIds, setSelectedServiceIds] = React.useState<number[]>([]);
+
+  const servicesTotal = selectedServiceIds.reduce((acc, id) => {
+    const s = availableServices.find(x => x.Id === id);
+    return acc + (s?.Price || 0);
+  }, 0);
+
+  const serviceFee = (subtotal + servicesTotal) * 0.10; // 10% service fee
+  const total = subtotal + servicesTotal + serviceFee;
   
   const handleConfirmReservation = async () => {
     if (!profile) return;
-    try {
-        // 1. Create the main reservation
-        // FIX: Specify the return type for api.post to avoid 'newReservation' being of type 'unknown'.
-        const newReservation = await api.post<Reservacion>('/reservaciones', {
-            usuarioId: profile.id,
-            eventoId: evento.id,
-            estado: 'CONFIRMADA',
-            total: total,
-            fecha: new Date().toISOString(),
-        });
+    // Navigate to mock payment gateway (non-functional) where user will confirm payment
+    navigate('/payment', { state: { selectedSeats, evento, zonasMap, selectedServiceIds, subtotal, servicesTotal, total, holdToken } });
+  };
 
-        // 2. Create reservation details and update seat status
-        await Promise.all(selectedSeats.map(seat => {
-            return api.post('/reservaciones_detalle', {
-                reservacionId: newReservation.id,
-                asientoId: seat.id,
-                precio: zonasMap[seat.zonaId].precio,
-            });
-        }));
-        
-        await Promise.all(selectedSeats.map(seat => {
-            return api.put(`/asientos/${seat.id}`, { ...seat, estado: 'ocupado' });
-        }));
+  React.useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const services = await reservationsApi.getAdditionalServices();
+        if (mounted) setAvailableServices(services || []);
+      } catch (e) {
+        console.warn('Could not load additional services', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
-        alert('¡Reservación confirmada con éxito!');
-        navigate('/perfil');
-
-    } catch (error) {
-        console.error("Error confirming reservation:", error);
-        alert('Hubo un error al confirmar tu reservación.');
-    }
+  const toggleService = (id: number) => {
+    setSelectedServiceIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   return (
     <div className="max-w-4xl mx-auto p-4">
+      {/* Hold banner */}
+      {holdToken && (
+        <div className="mb-4">
+          <div className="bg-red-600 text-white p-3 rounded-lg shadow-md font-bold text-center">
+            Tienes asientos reservados temporalmente para este evento. Completa el pago antes de que expire.
+          </div>
+        </div>
+      )}
       <h1 className="text-4xl font-bold text-white mb-8 border-b-2 border-primary pb-2">Confirmar Reserva</h1>
       <div className="bg-base-200 p-8 rounded-lg shadow-lg">
         <h2 className="text-2xl font-semibold mb-4">{evento.nombre}</h2>
@@ -82,11 +89,33 @@ export const CheckoutPage = () => {
             </div>
           ))}
         </div>
+        {availableServices.length > 0 && (
+          <div className="mb-6 border-b border-base-300 pb-6">
+            <h3 className="text-xl font-semibold text-primary mb-3">Servicios Adicionales</h3>
+            <div className="space-y-2">
+              {availableServices.map(s => (
+                <label key={s.Id} className="flex items-center justify-between text-gray-300 py-2">
+                  <div>
+                    <div className="font-medium">{s.Name} <span className="text-sm text-gray-400">(${s.Price})</span></div>
+                    <div className="text-sm text-gray-500">{s.Description}</div>
+                  </div>
+                  <input type="checkbox" checked={selectedServiceIds.includes(s.Id)} onChange={() => toggleService(s.Id)} />
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="space-y-2 text-lg">
             <div className="flex justify-between font-medium">
                 <span>Subtotal:</span>
                 <span>${subtotal.toFixed(2)}</span>
             </div>
+            {servicesTotal > 0 && (
+              <div className="flex justify-between font-medium text-gray-200">
+                <span>Servicios adicionales:</span>
+                <span>${servicesTotal.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-gray-400">
                 <span>Tasa de Servicio (10%):</span>
                 <span>${serviceFee.toFixed(2)}</span>
