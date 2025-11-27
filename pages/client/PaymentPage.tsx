@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import reservationsApi from '../../services/reservationsApi';
+import eventsApi from '../../services/eventsApi';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import api from '../../services/api';
 import { Button } from '../../components/ui/Button';
@@ -31,6 +32,9 @@ export const PaymentPage = () => {
 
   const [method, setMethod] = React.useState<string>('card');
   const [processing, setProcessing] = React.useState(false);
+  const [couponCode, setCouponCode] = React.useState<string>('');
+  const [appliedCoupon, setAppliedCoupon] = React.useState<any | null>(null);
+  const [discountAmount, setDiscountAmount] = React.useState<number>(0);
 
   if (!evento || selectedSeats.length === 0) {
     return (
@@ -52,10 +56,11 @@ export const PaymentPage = () => {
         date: new Date().toISOString().slice(0,10),
         state: 'paid',
         eventoId: evento.id,
-        total: total,
+        total: (total - discountAmount),
         additionalServiceIds: selectedServiceIds,
         seats: selectedSeats.map((s: any) => ({ asientoId: s.id, precio: zonasMap[s.zonaId]?.precio || 0 }))
       };
+      if (couponCode && appliedCoupon) payload.couponCode = couponCode;
       if (holdToken) payload.holdToken = holdToken;
 
       const res = await reservationsApi.createReservation(payload);
@@ -113,6 +118,28 @@ export const PaymentPage = () => {
     }
   };
 
+  const handleApplyCoupon = async () => {
+    if (!couponCode) return alert('Ingresa un código de cupón');
+    try {
+      const promos = await eventsApi.getPromotions();
+      const matched = (promos || []).find((p: any) => (p.Code ?? p.code)?.toString().toLowerCase() === couponCode.toLowerCase() && Number(p.EventId ?? p.eventId) === Number(evento.id));
+      if (!matched) return alert('Cupón no válido para este evento');
+      // Validate dates
+      const today = new Date();
+      const start = matched.StartDate ? new Date(matched.StartDate) : (matched.startDate ? new Date(matched.startDate) : null);
+      const end = matched.EndDate ? new Date(matched.EndDate) : (matched.endDate ? new Date(matched.endDate) : null);
+      if ((start && today < start) || (end && today > end)) return alert('Cupón no está en vigencia');
+      const pct = Number(matched.Percentage ?? matched.percentage ?? 0);
+      const discount = Math.round(((total) * pct / 100) * 100) / 100;
+      setAppliedCoupon(matched);
+      setDiscountAmount(discount);
+      alert(`Cupón aplicado: ${pct}% => descuento $${discount.toFixed(2)}`);
+    } catch (e) {
+      console.error('Error aplicando cupón', e);
+      alert('Error al validar el cupón');
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto p-6">
       {holdToken && (
@@ -142,11 +169,23 @@ export const PaymentPage = () => {
         <div className="border-t pt-2 mt-2">
           <div className="flex justify-between"><span>Servicios</span><span>${servicesTotal.toFixed(2)}</span></div>
           <div className="flex justify-between"><span>Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
-          <div className="flex justify-between font-bold"><span>Total</span><span>${total.toFixed(2)}</span></div>
+          {discountAmount > 0 && (
+            <div className="flex justify-between text-green-400"><span>Descuento ({appliedCoupon?.Percentage ?? appliedCoupon?.percentage ?? '0'}%)</span><span>-${discountAmount.toFixed(2)}</span></div>
+          )}
+          <div className="flex justify-between font-bold"><span>Total</span><span>${(total - discountAmount).toFixed(2)}</span></div>
         </div>
       </div>
 
       <div className="bg-base-200 p-4 rounded mb-4">
+        <h2 className="font-semibold">Cupón</h2>
+        <div className="flex gap-2 items-center mb-4">
+          <input value={couponCode} onChange={e=>setCouponCode(e.target.value)} placeholder="Código de cupón" className="p-2 bg-base-100 rounded" />
+          <Button onClick={handleApplyCoupon} variant="secondary">Aplicar Cupón</Button>
+          {appliedCoupon && (
+            <div className="ml-4 text-sm text-green-400">Aplicado: {appliedCoupon.Code ?? appliedCoupon.code} — Descuento: ${discountAmount.toFixed(2)}</div>
+          )}
+        </div>
+
         <h2 className="font-semibold mb-2">Método de pago</h2>
         <label className="flex items-center space-x-2"><input type="radio" name="pm" checked={method==='card'} onChange={() => setMethod('card')} /> <span>Tarjeta de crédito / débito</span></label>
         <label className="flex items-center space-x-2"><input type="radio" name="pm" checked={method==='paypal'} onChange={() => setMethod('paypal')} /> <span>PayPal</span></label>

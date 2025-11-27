@@ -5,6 +5,7 @@ import reservationsApi from '../../services/reservationsApi';
 import eventsApi from '../../services/eventsApi';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import { Link } from 'react-router-dom';
+import { Button } from '../../components/ui/Button';
 
 type Tab = 'reservaciones' | 'asistidos' | 'pagos';
 
@@ -119,14 +120,39 @@ export const UserProfile = () => {
                     <h3 className="font-bold text-lg text-white">{res.evento?.nombre || 'Evento Desconocido'}</h3>
                     <p className="text-sm text-gray-400">Fecha de compra: {new Date(res.fecha).toLocaleDateString()}</p>
                     <p className="text-sm text-gray-400">Total: ${Number(res.total || 0).toFixed(2)}</p>
+                    {res.couponCode && (
+                      <p className="text-sm text-green-300">Cupón: <span className="font-semibold">{res.couponCode}</span> — Descuento: ${Number(res.discountAmount ?? 0).toFixed(2)}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className={`px-3 py-1 text-sm font-semibold rounded-full ${res.estado === 'CONFIRMADA' || res.estado === 'paid' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
-                        {res.estado}
-                    </span>
+                    {(() => {
+                      const st = String(res.estado || '').toLowerCase();
+                      const isPaid = st === 'paid' || st === 'confirmada';
+                      const label = st === 'paid' ? 'Pagado' : (st === 'confirmada' ? 'Confirmada' : (res.estado || ''));
+                      return (
+                        <span className={`px-3 py-1 text-sm font-semibold rounded-full ${isPaid ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
+
                     <div className="flex items-center gap-2">
-                      <button onClick={() => toggleExpanded(res.id)} className="text-sm text-primary hover:underline">{expandedIds[String(res.id)] ? 'Ocultar' : 'Detalles'}</button>
-                      <Link to={`/evento/${res.eventoId}`} className="text-primary hover:underline text-sm">Ver Evento</Link>
+                      <Button size="sm" variant="ghost" onClick={() => toggleExpanded(res.id)}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        <span className="text-sm">{expandedIds[String(res.id)] ? 'Ocultar' : 'Detalles'}</span>
+                      </Button>
+
+                      <Link to={`/evento/${res.eventoId}`}>
+                        <Button size="sm" variant="secondary">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                          </svg>
+                          <span className="text-sm">Ver Evento</span>
+                        </Button>
+                      </Link>
                     </div>
                   </div>
                 </div>
@@ -161,6 +187,14 @@ export const UserProfile = () => {
                         </ul>
                       ) : <p className="text-gray-400">No hay asientos registrados para esta reservación.</p>}
                     </div>
+
+                    {res.couponCode && (
+                      <div className="mt-4">
+                        <h4 className="font-semibold">Cupón aplicado</h4>
+                        <p className="text-sm">Código: <span className="font-medium">{res.couponCode}</span></p>
+                        <p className="text-sm">Descuento: <span className="font-medium">${Number(res.discountAmount ?? 0).toFixed(2)}</span></p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
