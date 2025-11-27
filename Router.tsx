@@ -20,7 +20,7 @@ import { EventManagementPage } from './pages/admin/EventManagementPage';
 import { EventCreationPage } from './pages/admin/EventCreationPage';
 import { EventEditPage } from './pages/admin/EventEditPage';
 import { StageManagementPage } from './pages/admin/StageManagementPage';
-import { PromotionManagementPage } from './pages/admin/PromotionManagementPage';
+import PromotionManagementPage from './pages/admin/PromotionManagementPage';
 import { UserManagementPage } from './pages/admin/UserManagementPage';
 import { ReservationManagementPage } from './pages/admin/ReservationManagementPage';
 import { AdditionalServicesPage } from './pages/admin/AdditionalServicesPage';

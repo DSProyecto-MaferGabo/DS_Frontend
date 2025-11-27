@@ -16,6 +16,10 @@ async function request<T>(path: string, method = 'GET', body?: any): Promise<T> 
   });
 
   if (!res.ok) {
+    // Try to read response body for diagnostics
+    let textBody: string | null = null;
+    try { textBody = await res.text(); } catch (e) { textBody = null; }
+    console.error(`[eventsApi] HTTP ${res.status} ${res.statusText} -> ${method} ${BASE_URL}${path}`, textBody);
     // If unauthorized, try to refresh token once and retry
     if (res.status === 401) {
       const refreshed = await keycloak.ensureTokenValid(30).catch(() => false);
@@ -32,11 +36,17 @@ async function request<T>(path: string, method = 'GET', body?: any): Promise<T> 
       }
       throw new Error('SESSION_EXPIRED');
     }
-    throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    throw new Error(`HTTP ${res.status} ${res.statusText}: ${textBody ?? ''}`);
   }
-  // Some endpoints return empty 204
-  if (res.status === 204) return {} as T;
-  return (await res.json()) as T;
+  // Handle potentially empty success responses (some controllers return Ok() with empty body)
+  const text = await res.text();
+  if (!text || text.trim() === '') return {} as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch (e) {
+    console.error('[eventsApi] Failed to parse JSON response for', `${method} ${BASE_URL}${path}`, text);
+    throw new Error('Invalid JSON response from server');
+  }
 }
 
 // Map backend EventDto -> frontend Evento
@@ -165,3 +175,4 @@ export default {
   updatePromotion: async (id: number, payload: any) => request<Json>(`/Promotion/${id}`, 'PUT', payload),
   deletePromotion: async (id: number) => request<Json>(`/Promotion/${id}`, 'DELETE'),
 };
+

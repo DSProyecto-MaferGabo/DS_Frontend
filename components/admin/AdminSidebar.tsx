@@ -15,6 +15,7 @@ import {
 const navItems = [
   { name: 'Eventos', href: '/admin/eventos', icon: CalendarIcon, active: true },
     { name: 'Escenarios', href: '/admin/escenarios', icon: CalendarIcon, active: true },
+  { name: 'Promociones', href: '/admin/promociones', icon: TicketIcon, active: true },
   { name: 'Usuarios', href: '/admin/usuarios', icon: UsersIcon, active: true },
     { name: 'Servicios', href: '/admin/servicios', icon: CreditCardIcon, active: true },
   { name: 'Categorías', href: '/admin/categorias', icon: TagIcon, active: true },
