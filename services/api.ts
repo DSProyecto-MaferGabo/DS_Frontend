@@ -1,7 +1,7 @@
 
 import keycloak from './keycloakService';
 
-const BASE_URL = import.meta.env.VITE_USERS_API_URL || 'http://localhost:5224';
+const BASE_URL = import.meta.env.VITE_USERS_API_URL || 'http://localhost:5278/api';
 
 const api = {
   get: async <T,>(path: string): Promise<T> => {

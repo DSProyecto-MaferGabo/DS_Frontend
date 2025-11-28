@@ -176,14 +176,42 @@ export const AdditionalServicesPage = () => {
           services.map(s => (
             <div key={s.Id} className="bg-base-300 rounded-lg overflow-hidden shadow-lg">
               <div className="h-24 flex items-center justify-center bg-base-200">
-                <div className="text-xl font-bold">{s.Name}</div>
+                {editingId === s.Id ? (
+                  <input
+                    className="text-xl font-bold bg-transparent text-center w-full px-4"
+                    value={editForm.name}
+                    onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                    aria-label={`Nombre servicio ${s.Id}`}
+                  />
+                ) : (
+                  <div className="text-xl font-bold">{s.Name}</div>
+                )}
               </div>
               <div className="p-4 flex justify-between items-start">
-                <div>
-                  <div className="text-sm text-gray-400">{s.Description}</div>
+                <div className="flex-1 pr-4">
+                  {editingId === s.Id ? (
+                    <textarea
+                      className="w-full p-2 rounded bg-base-100"
+                      value={editForm.description}
+                      onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+                      aria-label={`Descripción servicio ${s.Id}`}
+                    />
+                  ) : (
+                    <div className="text-sm text-gray-400">{s.Description}</div>
+                  )}
                 </div>
-                <div className="ml-4 text-right flex flex-col items-end gap-2">
-                  <div className="font-semibold">${s.Price}</div>
+                <div className="ml-4 text-right flex flex-col items-end gap-2" style={{minWidth:120}}>
+                  {editingId === s.Id ? (
+                    <input
+                      type="number"
+                      className="w-32 p-2 rounded bg-base-100 text-right"
+                      value={String(editForm.price)}
+                      onChange={e => setEditForm(prev => ({ ...prev, price: Number(e.target.value) }))}
+                      aria-label={`Precio servicio ${s.Id}`}
+                    />
+                  ) : (
+                    <div className="font-semibold">${s.Price}</div>
+                  )}
                   {editingId === s.Id ? (
                     <div className="flex items-center space-x-2">
                       <Button variant="primary" size="sm" onClick={() => handleSave(s.Id)} disabled={savingId === s.Id} aria-label="Guardar servicio">

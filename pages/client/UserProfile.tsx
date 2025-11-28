@@ -106,9 +106,30 @@ export const UserProfile = () => {
 
   const renderContent = () => {
     if(loading) return <div className="text-center p-8">Cargando tus datos...</div>;
+    // compute precise event DateTime using `fecha` (DateOnly) and optional `hora` returned by Events API
+    const eventDateTime = (evt?: any) => {
+      if (!evt || !evt.fecha) return new Date(0);
+      const date = String(evt.fecha);
+      const time = evt.hora ?? evt.time ?? null;
+      try {
+        if (time) {
+          // prefer ISO-like "YYYY-MM-DDTHH:mm[:ss]" when time is simple HH:mm or HH:mm:ss
+          if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(time)) {
+            return new Date(`${date}T${time}`);
+          }
+          // fall back to parsing "YYYY-MM-DD HH:mm AM/PM" or other locale variants
+          return new Date(`${date} ${time}`);
+        }
+        // no time provided -> treat event as happening at end of day to include same-day events
+        return new Date(`${date}T23:59:59`);
+      } catch (e) {
+        return new Date(date);
+      }
+    };
+
     switch (activeTab) {
       case 'reservaciones':
-        const activas = reservaciones.filter(r => new Date(r.evento?.fecha || 0) >= new Date());
+        const activas = reservaciones.filter(r => eventDateTime(r.evento) >= new Date());
         const toggleExpanded = (id: string | number) => setExpandedIds(prev => ({ ...prev, [String(id)]: !prev[String(id)] }));
 
         return activas.length > 0 ? (
@@ -119,7 +140,11 @@ export const UserProfile = () => {
                   <div>
                     <h3 className="font-bold text-lg text-white">{res.evento?.nombre || 'Evento Desconocido'}</h3>
                     <p className="text-sm text-gray-400">Fecha de compra: {new Date(res.fecha).toLocaleDateString()}</p>
-                    <p className="text-sm text-gray-400">Total: ${Number(res.total || 0).toFixed(2)}</p>
+                        <p className="text-sm text-gray-400">Total: ${Number(res.total || 0).toFixed(2)}</p>
+                        <p className="text-sm text-gray-400">Entradas: {((res._seatsDetailed && res._seatsDetailed.length>0)
+                          ? res._seatsDetailed.map((s:any)=>s.label).join(', ')
+                          : (res.seats && res.seats.length>0) ? res.seats.map((s:any)=>String(s.asientoId)).join(', ') : '—')}
+                        </p>
                     {res.couponCode && (
                       <p className="text-sm text-green-300">Cupón: <span className="font-semibold">{res.couponCode}</span> — Descuento: ${Number(res.discountAmount ?? 0).toFixed(2)}</p>
                     )}
@@ -201,8 +226,8 @@ export const UserProfile = () => {
             ))}
           </div>
         ) : <p className="text-gray-400">No tienes reservaciones para eventos futuros.</p>;
-      case 'asistidos':
-          const pasadas = reservaciones.filter(r => new Date(r.evento?.fecha || 0) < new Date());
+        case 'asistidos':
+          const pasadas = reservaciones.filter(r => eventDateTime(r.evento) < new Date());
           return pasadas.length > 0 ? (
              <div className="space-y-4">
                 {pasadas.map(res => (

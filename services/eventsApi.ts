@@ -1,6 +1,8 @@
 import keycloak from './keycloakService';
 
-const BASE_URL = import.meta.env.VITE_EVENTS_API_URL || 'http://localhost:5002';
+// Default to the API Gateway with the '/api' prefix so production builds
+// talk to the gateway. Override with VITE_EVENTS_API_URL in env when needed.
+const BASE_URL = import.meta.env.VITE_EVENTS_API_URL || 'http://localhost:5278/api';
 
 type Json = any;
 

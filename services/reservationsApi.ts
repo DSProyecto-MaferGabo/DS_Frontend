@@ -1,6 +1,6 @@
 import keycloak from './keycloakService';
 
-const BASE_URL = import.meta.env.VITE_RESERVATIONS_API_URL || 'http://localhost:5234';
+const BASE_URL = import.meta.env.VITE_RESERVATIONS_API_URL || 'http://localhost:5278/api';
 
 type Json = any;
 
