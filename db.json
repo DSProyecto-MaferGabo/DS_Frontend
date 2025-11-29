@@ -1,0 +1,56 @@
+{
+  "eventos": [
+    {
+      "id": 1,
+      "nombre": "La Rumba del Año: Billo's y Nelson Arrieta",
+      "descripcion": "Nelson Arrieta y Billo's Caracas Boys se unen para La Rumba del Año en Weston. Una noche bailable para revivir los grandes éxitos que han marcado generaciones. ¡No te lo puedes perder!",
+      "fecha": "2025-12-13T20:00:00.000Z",
+      "ubicacion": "Bonaventure Town Center",
+      "posterUrl": "https://picsum.photos/seed/rumba/800/1200"
+    },
+    {
+      "id": 2,
+      "nombre": "React Conference 2025",
+      "descripcion": "La conferencia anual para desarrolladores de React. Charlas de expertos, talleres prácticos y networking con la comunidad. Aprende sobre las últimas tendencias y el futuro del desarrollo frontend.",
+      "fecha": "2025-11-15T09:00:00.000Z",
+      "ubicacion": "Centro de Convenciones Metropolitano",
+      "posterUrl": "https://picsum.photos/seed/reactconf/800/1200"
+    }
+  ],
+  "escenarios": [
+    { "id": 1, "eventoId": 1, "nombre": "Bonaventure Town Center" },
+    { "id": 2, "eventoId": 2, "nombre": "Auditorio Principal" }
+  ],
+  "zonas": [
+    { "id": 1, "escenarioId": 1, "nombre": "VIP Mesas", "precio": 143.00, "color": "#ef4444" },
+    { "id": 2, "escenarioId": 1, "nombre": "VIP", "precio": 110.00, "color": "#3b82f6" },
+    { "id": 3, "escenarioId": 1, "nombre": "General", "precio": 89.60, "color": "#22c55e" }
+  ],
+  "asientos": [
+    { "id": "1-M26-10", "escenarioId": 1, "zonaId": 1, "fila": "Mesa 26", "numero": "10", "estado": "disponible" },
+    { "id": "1-M26-9", "escenarioId": 1, "zonaId": 1, "fila": "Mesa 26", "numero": "9", "estado": "disponible" },
+    { "id": "1-C-5", "escenarioId": 1, "zonaId": 2, "fila": "Fila C", "numero": "5", "estado": "ocupado" },
+    { "id": "1-D-8", "escenarioId": 1, "zonaId": 2, "fila": "Fila D", "numero": "8", "estado": "disponible" },
+    { "id": "1-G-12", "escenarioId": 1, "zonaId": 3, "fila": "Fila G", "numero": "12", "estado": "disponible" },
+    { "id": "1-G-13", "escenarioId": 1, "zonaId": 3, "fila": "Fila G", "numero": "13", "estado": "disponible" }
+  ],
+  "usuarios": [
+    {
+      "id": "uuid-user-1",
+      "nombre": "Gabriel",
+      "email": "gabriel@test.com"
+    },
+    {
+      "id": "uuid-admin-1",
+      "nombre": "Admin",
+      "email": "admin@test.com"
+    }
+  ],
+  "reservaciones": [
+    { "id": 1, "usuarioId": "uuid-user-1", "eventoId": 1, "estado": "CONFIRMADA", "total": 286.00, "fecha": "2025-09-20T10:00:00.000Z" }
+  ],
+  "reservaciones_detalle": [
+    { "id": 1, "reservacionId": 1, "asientoId": "1-M26-10", "precio": 143.00 },
+    { "id": 2, "reservacionId": 1, "asientoId": "1-M26-9", "precio": 143.00 }
+  ]
+}
