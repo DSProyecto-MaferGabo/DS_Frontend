@@ -35,6 +35,27 @@ export const PaymentPage = () => {
   const [couponCode, setCouponCode] = React.useState<string>('');
   const [appliedCoupon, setAppliedCoupon] = React.useState<any | null>(null);
   const [discountAmount, setDiscountAmount] = React.useState<number>(0);
+  const [holdRemaining, setHoldRemaining] = React.useState<number | null>(() => {
+    if (!holdExpires) return null;
+    const t = new Date(holdExpires).getTime();
+    if (isNaN(t)) return null;
+    return Math.max(0, Math.floor((t - Date.now()) / 1000));
+  });
+
+  // update countdown every second
+  React.useEffect(() => {
+    if (!holdExpires) return;
+    let mounted = true;
+    const tick = () => {
+      const t = new Date(holdExpires).getTime();
+      if (isNaN(t)) { setHoldRemaining(null); return; }
+      const secs = Math.max(0, Math.floor((t - Date.now()) / 1000));
+      if (mounted) setHoldRemaining(secs);
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => { mounted = false; clearInterval(iv); };
+  }, [holdExpires]);
 
   if (!evento || selectedSeats.length === 0) {
     return (
@@ -144,8 +165,17 @@ export const PaymentPage = () => {
     <div className="max-w-3xl mx-auto p-6">
       {holdToken && (
         <div className="mb-4">
-          <div className="bg-red-600 text-white p-3 rounded-lg shadow-md font-bold text-center">
-            Tienes asientos reservados temporalmente. Finaliza el pago antes de que caduque.
+          <div className="bg-red-600 text-white p-4 rounded-lg shadow-md font-bold text-center">
+            <div>Tienes asientos reservados temporalmente. Finaliza el pago antes de que caduque.</div>
+            {holdRemaining !== null ? (
+              <div className="mt-3 flex items-center justify-center gap-3">
+                <div className="bg-black text-white px-3 py-1 rounded font-mono text-lg" aria-live="polite" aria-atomic="true">{Math.floor(holdRemaining/60).toString().padStart(2,'0')}</div>
+                <div className="text-white text-lg">:</div>
+                <div className="bg-black text-white px-3 py-1 rounded font-mono text-lg" aria-live="polite" aria-atomic="true">{(holdRemaining%60).toString().padStart(2,'0')}</div>
+              </div>
+            ) : (
+              <div className="mt-2 text-sm">Tiempo de retención desconocido</div>
+            )}
           </div>
         </div>
       )}

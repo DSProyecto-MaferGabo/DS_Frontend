@@ -18,6 +18,16 @@ export const HomePage = () => {
         // Filter out events that have already finished (date + optional time)
         const now = new Date();
         const upcoming = (data || []).filter((e: any) => {
+          // only show to clients when the event is published and not cancelled
+          // explicit flags from backend take precedence
+          if (e.isPublished === false) return false;
+          if (e.isCancelled === true) return false;
+          // if isPublished not provided, fall back to inferred flag or state
+          const inferred = e.isPublished === true || e._inferredPublished === true;
+          if (e.isPublished === null || e.isPublished === undefined) {
+            // if neither explicit published nor inferred, treat as not visible
+            if (!inferred) return false;
+          }
           if (!e || !e.fecha) return false;
           try {
             // Parse fecha (YYYY-MM-DD) and hora (HH:mm:ss) into local Date parts

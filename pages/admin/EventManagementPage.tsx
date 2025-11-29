@@ -47,6 +47,14 @@ export const EventManagementPage = () => {
     }
   }, []);
 
+  const eventStatus = (ev: any) => {
+    const isCancelled = ev.isCancelled;
+    const isPublished = ev.isPublished;
+    if (isCancelled === true) return { label: 'Cancelado', bg: 'bg-red-600', text: 'text-white' };
+    if (isPublished === true) return { label: 'Publicado', bg: 'bg-green-600', text: 'text-white' };
+    return { label: 'Creado', bg: 'bg-gray-500', text: 'text-white' };
+  };
+
   useEffect(() => {
     fetchEventos();
   }, [fetchEventos]);
@@ -88,6 +96,13 @@ export const EventManagementPage = () => {
                 <div className="relative">
                   <img className="w-full h-48 object-cover" src={(evento as any).posterUrl || `https://picsum.photos/seed/event-${evento.id}/800/400`} alt={evento.nombre} />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                  {/* Status badge */}
+                  <div className="absolute top-3 right-3">
+                    {(() => {
+                      const st = eventStatus(evento as any);
+                      return <span className={`px-3 py-1 rounded ${st.bg} ${st.text} font-semibold text-sm`}>{st.label}</span>;
+                    })()}
+                  </div>
                 </div>
                 <div className="p-4 flex flex-col flex-grow">
                   <div className="flex justify-between items-start">

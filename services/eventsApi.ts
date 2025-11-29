@@ -65,6 +65,19 @@ function mapEvent(dto: any) {
     stageId: dto.stageId,
   // keep category information if present so frontend can filter by category
   categoryId: dto.categoryId ?? dto.CategoryId ?? dto.category?.id ?? dto.category?.Id ?? null,
+  // include state/raw status so UI can decide visibility (published/cancelled/etc)
+  state: (dto.state ?? dto.State ?? dto.estado ?? dto.status ?? dto.Status ?? null),
+  // explicit flags from backend when available
+  isPublished: (dto.isPublished ?? dto.published ?? null),
+  isCancelled: (dto.isCancelled ?? dto.cancelled ?? dto.canceled ?? null),
+  // convenience fallback: if explicit isPublished not provided, try to infer from state
+  _inferredPublished: (() => {
+    const s = (dto.state ?? dto.State ?? dto.estado ?? dto.status ?? null);
+    if (dto.isPublished !== undefined && dto.isPublished !== null) return dto.isPublished === true;
+    try {
+      return s ? (String(s).toLowerCase().includes('publ') || String(s).toLowerCase().includes('activo') || String(s).toLowerCase().includes('publicado')) : false;
+    } catch { return false; }
+  })(),
   };
 }
 

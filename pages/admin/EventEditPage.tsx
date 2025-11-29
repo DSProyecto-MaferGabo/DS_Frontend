@@ -95,6 +95,26 @@ export const EventEditPage = () => {
     fetch();
   }, [id]);
 
+  // helper: compute if event is past (date + optional time)
+  const eventDateTime = (evt?: any) => {
+    if (!evt || !evt.fecha) return new Date(0);
+    const date = String(evt.fecha);
+    const parts = date.split('-').map(Number);
+    if (parts.length < 3) return new Date(date);
+    const [y, m, d] = parts;
+    let hour = 23, minute = 59, second = 59;
+    const time = evt.hora ?? evt.time ?? null;
+    if (time) {
+      const tparts = String(time).split(':').map((p:any) => Number(p));
+      if (!isNaN(tparts[0])) hour = tparts[0];
+      if (!isNaN(tparts[1])) minute = tparts[1];
+      if (!isNaN(tparts[2])) second = tparts[2];
+    }
+    return new Date(y, m-1, d, hour, minute, second);
+  };
+
+  const isPastEvent = evento ? (eventDateTime(evento) < new Date()) : false;
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setEvento(prev => ({ ...(prev || {}), [name]: value }));
@@ -232,9 +252,26 @@ export const EventEditPage = () => {
   if (loading) return <p>Cargando evento...</p>;
   if (!evento) return <p>Evento no encontrado</p>;
 
+  const eventStatus = () => {
+    const isCancelled = (evento as any).isCancelled;
+    const isPublished = (evento as any).isPublished;
+    if (isCancelled === true) return { label: 'Cancelado', bg: 'bg-red-600', text: 'text-white' };
+    if (isPublished === true) return { label: 'Publicado', bg: 'bg-green-600', text: 'text-white' };
+    return { label: 'Creado', bg: 'bg-gray-500', text: 'text-white' };
+  };
+
+  const status = eventStatus();
   return (
     <div>
-      <h1 className="text-3xl font-bold mb-4">Editar Evento</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-3xl font-bold">Editar Evento</h1>
+        <div>
+          <span className={`px-3 py-1 rounded ${status.bg} ${status.text} font-semibold`}>{status.label}</span>
+        </div>
+      </div>
+      {isPastEvent && (
+        <div className="mb-4 p-3 rounded bg-yellow-200 text-yellow-900">Este evento ya ocurrió. No se permiten ediciones, eliminaciones ni agregar elementos.</div>
+      )}
       <div className="bg-base-200 p-6 rounded-lg mb-6">
         {stageInfo && (
           <div className="mb-4 p-3 bg-base-300 rounded">
@@ -242,44 +279,44 @@ export const EventEditPage = () => {
             <div className="text-sm text-gray-400">Ubicación: {stageInfo.location} · Aforo: {stageInfo.peoplecapacity ?? stageInfo.peopleCapacity}</div>
           </div>
         )}
-  <label className="block mb-2 font-semibold">Nombre</label>
-        <input name="nombre" value={evento.nombre || ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" />
+    <label className="block mb-2 font-semibold">Nombre</label>
+      <input name="nombre" value={evento.nombre || ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" disabled={isPastEvent} />
 
   <label className="block mb-2 font-semibold">Fecha</label>
-        <input name="fecha" type="date" value={evento.fecha ? evento.fecha.substring(0,10) : ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" />
+        <input name="fecha" type="date" value={evento.fecha ? evento.fecha.substring(0,10) : ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" disabled={isPastEvent} />
 
   <label className="block mb-2 font-semibold">Ubicación</label>
-        <input name="ubicacion" value={evento.ubicacion || ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" />
+        <input name="ubicacion" value={evento.ubicacion || ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" disabled={isPastEvent} />
 
   <label className="block mb-2 font-semibold">Descripción</label>
-    <textarea name="descripcion" value={evento.descripcion || ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" rows={4} />
+    <textarea name="descripcion" value={evento.descripcion || ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" rows={4} disabled={isPastEvent} />
 
   <label className="block mb-2 font-semibold">Categoría</label>
-    <select className="w-full p-2 bg-base-300 rounded mb-4" value={(evento as any).categoryId ?? ''} onChange={e => setEvento(prev => ({ ...(prev || {}), categoryId: e.target.value ? Number(e.target.value) : null }))}>
+    <select className="w-full p-2 bg-base-300 rounded mb-4" value={(evento as any).categoryId ?? ''} onChange={e => setEvento(prev => ({ ...(prev || {}), categoryId: e.target.value ? Number(e.target.value) : null }))} disabled={isPastEvent}>
       <option value="">-- Sin categoría --</option>
       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
     </select>
 
         <div className="flex gap-2">
-          <Button onClick={handleSave} variant="primary">
+          <Button onClick={handleSave} variant="primary" disabled={isPastEvent}>
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             Guardar Cambios
           </Button>
-          <Button onClick={handlePublish} variant="secondary">
+          <Button onClick={handlePublish} variant="secondary" disabled={isPastEvent}>
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v14M5 12h14" />
             </svg>
             Publicar
           </Button>
-          <Button onClick={handleCancel} variant="ghost">
+          <Button onClick={handleCancel} variant="ghost" disabled={isPastEvent}>
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
             Cancelar
           </Button>
-          <Button onClick={handleDelete} variant="danger">
+          <Button onClick={handleDelete} variant="danger" disabled={isPastEvent}>
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6" />
             </svg>
@@ -308,7 +345,7 @@ export const EventEditPage = () => {
                       </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="secondary" onClick={() => addSeatLocally(z)}>Agregar asiento</Button>
+                    <Button variant="secondary" onClick={() => { if (isPastEvent) { alert('No se pueden agregar asientos a un evento ya sucedido.'); return; } addSeatLocally(z); }} disabled={isPastEvent}>Agregar asiento</Button>
                     <Button variant="ghost" onClick={() => { navigator.clipboard?.writeText(JSON.stringify({ zona: z.nombre, precio: z.precio })); alert('Zona copiada al portapapeles'); }}>Copiar zona</Button>
                   </div>
                 </div>
@@ -336,6 +373,7 @@ export const EventEditPage = () => {
                                       onMouseEnter={() => setHoveredSeatId(seatId)}
                                       onMouseLeave={() => setHoveredSeatId(null)}
                                       onClick={() => {
+                                        if (isPastEvent) { alert('No se pueden modificar asientos de un evento ya sucedido.'); return; }
                                         if (isOccupied) { alert('Este asiento ya fue comprado y no puede eliminarse.'); return; }
                                         const name = `${s.fila}-${s.numero}`;
                                         const details = `Asiento ${name}\nZona: ${s.zone || s.zonaId}\nPrecio: ${s.precio ?? s.price ?? 'N/A'}`;
