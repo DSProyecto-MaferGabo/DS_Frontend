@@ -68,6 +68,7 @@ export default {
     request<Json>('/Reservation/hold', 'POST', payload),
   releaseHold: async (token: string) => request<Json>(`/Reservation/hold/${encodeURIComponent(token)}`, 'DELETE'),
   createReservation: async (payload: { date: string; state: string; eventoId?: number; total?: number; additionalServiceIds?: number[]; seats?: { asientoId: string; precio: number }[]; holdToken?: string | null; couponCode?: string | null }) => request<Json>('/Reservation', 'POST', payload),
+  trackEventView: async (eventId: number) => request<Json>(`/Reservation/events/${eventId}/view`, 'POST'),
   createAdditionalService: async (payload: { name: string; description: string; price: number }) => request<Json>('/AdditionalService', 'POST', payload),
   updateAdditionalService: async (id: number, payload: { name: string; description: string; price: number }) => request<Json>(`/AdditionalService/${id}`, 'PUT', payload),
   deleteAdditionalService: async (id: number) => request<Json>(`/AdditionalService/${id}`, 'DELETE'),

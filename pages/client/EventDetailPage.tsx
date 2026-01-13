@@ -2,10 +2,62 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import eventsApi from '../../services/eventsApi';
 import reservationsApi from '../../services/reservationsApi';
-import type { Evento } from '../../types';
+import mediaApi, { MediaFileRecord } from '../../services/mediaApi';
+import type { Evento, EventFormat } from '../../types';
 import { Button } from '../../components/ui/Button';
+import { useKeycloak } from '../../hooks/useKeycloak';
 import { CalendarIcon, MapPinIcon } from '@heroicons/react/24/solid';
 import { EventCard } from '../../components/EventCard';
+
+const FORMAT_LABELS: Record<EventFormat, string> = {
+  presencial: 'Evento presencial',
+  streaming: 'Evento en streaming',
+  hibrido: 'Evento híbrido',
+};
+
+const POSTER_FALLBACK = 'https://picsum.photos/seed/ds-detail/960/640';
+
+const FORMAT_BADGE_CLASSES: Record<EventFormat, string> = {
+  presencial: 'bg-emerald-500/15 text-emerald-200 border border-emerald-400/30',
+  streaming: 'bg-indigo-500/15 text-indigo-200 border border-indigo-400/30',
+  hibrido: 'bg-amber-500/15 text-amber-200 border border-amber-400/30',
+};
+
+const isStreamingFormat = (format: EventFormat) => format === 'streaming' || format === 'hibrido';
+
+const buildStreamingEmbedUrl = (raw?: string | null) => {
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes('youtu.be')) {
+      const id = parsed.pathname.replace('/', '').trim();
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (host.includes('youtube.com')) {
+      if (parsed.pathname.startsWith('/embed/')) return raw;
+      const videoId = parsed.searchParams.get('v');
+      if (videoId) return `https://www.youtube.com/embed/${videoId}`;
+      const segments = parsed.pathname.split('/').filter(Boolean);
+      if (segments[0] === 'live' && segments[1]) {
+        return `https://www.youtube.com/embed/${segments[1]}`;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
+const resolveAssetUrl = (asset: MediaFileRecord | null) => {
+  if (!asset) return null;
+  return asset.publicUrl ?? (asset as any)?.url ?? null;
+};
+
+const resolveAssetName = (asset: MediaFileRecord | null, fallback: string) => {
+  if (!asset) return fallback;
+  return asset.originalFileName ?? (asset as any)?.OriginalFileName ?? fallback;
+};
 
 export const EventDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +69,13 @@ export const EventDetailPage = () => {
   const [hasOverflow, setHasOverflow] = useState(false);
   const [showLeftFade, setShowLeftFade] = useState(false);
   const [showRightFade, setShowRightFade] = useState(false);
+  const [programAsset, setProgramAsset] = useState<MediaFileRecord | null>(null);
+  const [receiptAsset, setReceiptAsset] = useState<MediaFileRecord | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
+
+  const { profile, authenticated } = useKeycloak();
+  const [hasTicket, setHasTicket] = useState<boolean>(false);
+  const [simulatedStreaming, setSimulatedStreaming] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchEvento = async () => {
@@ -90,11 +149,28 @@ export const EventDetailPage = () => {
               const total = seatsInZona.length;
               let reserved = 0;
               seatsInZona.forEach((s: any) => {
-                const sid = String(s.rawId ?? s.id ?? s.id);
+                const sid = String(s.rawId ?? s.id ?? s.ID ?? '');
                 if (reservedSeatIds.has(sid)) reserved++;
               });
               return { id: z.id, nombre: z.nombre, precio: z.precio ?? z.price, total, available: Math.max(0, total - reserved) };
             });
+
+            // Also determine whether the current authenticated user has a confirmed reservation (ticket)
+            try {
+              if (authenticated && profile?.id) {
+                const myRes = await reservationsApi.getReservations(profile.id).catch(() => []);
+                const hasConfirmed = (myRes || []).some((r:any) => {
+                  const evId = Number(r.eventoId ?? r.evento ?? r.EventoId ?? 0);
+                  const estado = String(r.estado ?? r.State ?? r.state ?? '').toLowerCase();
+                  const paidStates = ['confirmada','confirmado','paid','pagada','pagado','completada','completado','completed','confirmed'];
+                  return evId === Number(id) && paidStates.includes(estado);
+                });
+                setHasTicket(hasConfirmed);
+              }
+            } catch (e) {
+              console.warn('Could not determine user reservations for streaming entitlement', e);
+            }
+
             setZonasAvailability(zonasInfo);
           }
         } catch (e) {
@@ -107,6 +183,45 @@ export const EventDetailPage = () => {
       }
     };
     fetchEvento();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    const loadAssets = async () => {
+      setMediaLoading(true);
+      try {
+        const [programFiles, receiptFiles] = await Promise.all([
+          mediaApi.getEventFiles(Number(id), 'program').catch(() => []),
+          mediaApi.getEventFiles(Number(id), 'payment-receipt').catch(() => []),
+        ]);
+        if (!cancelled) {
+          setProgramAsset((programFiles || [])[0] ?? null);
+          setReceiptAsset((receiptFiles || [])[0] ?? null);
+        }
+      } catch (err) {
+        console.warn('No se pudieron obtener archivos descargables del evento', err);
+        if (!cancelled) {
+          setProgramAsset(null);
+          setReceiptAsset(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setMediaLoading(false);
+        }
+      }
+    };
+    loadAssets();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    reservationsApi.trackEventView(Number(id)).catch(err => {
+      console.warn('No se pudo registrar la vista del evento', err);
+    });
   }, [id]);
 
   // Manage carousel overflow and fades
@@ -154,15 +269,47 @@ export const EventDetailPage = () => {
   const eventDate = buildDateTime(evento.fecha, evento.hora);
   const formattedDate = eventDate.toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   const formattedTime = evento.hora ?? eventDate.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  const eventFormat = ((evento as any).eventFormat ?? 'presencial') as EventFormat;
+  const streamingUrl = String((evento as any).streamingUrl ?? '').trim();
+  const streamingEmbedUrl = buildStreamingEmbedUrl(streamingUrl);
+  const streamingReady = isStreamingFormat(eventFormat);
+  const streamingPrice = Number((evento as any).generalPrice ?? 0) || 0;
+  const posterSrc = typeof evento.posterUrl === 'string' && evento.posterUrl.trim().length > 0 ? evento.posterUrl : POSTER_FALLBACK;
+  const programUrl = resolveAssetUrl(programAsset);
+  const receiptUrl = resolveAssetUrl(receiptAsset);
+  const hasDownloads = Boolean(programAsset || receiptAsset || mediaLoading);
+  const [signedLink, setSignedLink] = useState<string | null>(null);
+
+  const generateSignedStreamingUrl = () => {
+    if (!streamingUrl || !hasTicket) {
+      setSignedLink(null);
+      return;
+    }
+    const exp = Date.now() + 30 * 60 * 1000; // 30 minutos
+    const payload = `${streamingUrl}|${profile?.id ?? 'user'}|${exp}`;
+    const token = btoa(payload).replace(/=+$/,'');
+    const link = `${streamingUrl}${streamingUrl.includes('?') ? '&' : '?'}token=${token}&exp=${exp}`;
+    setSignedLink(link);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div className="md:col-span-1">
-          <img src={evento.posterUrl} alt={evento.nombre} className="rounded-lg shadow-2xl w-full object-cover" />
+          <img src={posterSrc} alt={evento.nombre} className="rounded-lg shadow-2xl w-full object-cover" />
         </div>
         <div className="md:col-span-2">
           <h1 className="text-4xl md:text-5xl font-extrabold text-white mb-4">{evento.nombre}</h1>
+          <div className="flex flex-wrap items-center gap-3 mb-6">
+            <span className={`text-xs tracking-wide uppercase font-semibold px-3 py-1 rounded-full ${FORMAT_BADGE_CLASSES[eventFormat]}`}>
+              {FORMAT_LABELS[eventFormat]}
+            </span>
+            {streamingReady && (
+              <span className="text-xs text-gray-400">
+                {streamingUrl ? 'Disponible también en línea' : 'El organizador compartirá el enlace en breve'}
+              </span>
+            )}
+          </div>
           <p className="text-lg text-gray-300 mb-6">{evento.descripcion}</p>
           
           <div className="bg-base-200/50 p-6 rounded-lg mb-6 space-y-4">
@@ -174,6 +321,64 @@ export const EventDetailPage = () => {
                 <MapPinIcon className="w-6 h-6 mr-3 text-primary"/>
                 <span className="text-white">{evento.ubicacion || 'Ubicación no disponible'}</span>
             </div>
+
+            {streamingReady && (
+              <div className="pt-4 border-t border-base-300">
+                <h3 className="font-semibold mb-2">Streaming en vivo</h3>
+                    {/* Streaming should only be visible to users who purchased a ticket and when the event time has arrived; allow simulation via a button */}
+                {((new Date() >= eventDate && hasTicket) || simulatedStreaming) ? (
+                  streamingEmbedUrl ? (
+                    <div className="aspect-video w-full rounded-lg overflow-hidden border border-base-300">
+                      <iframe
+                        src={streamingEmbedUrl}
+                        title={`Streaming de ${evento.nombre}`}
+                        className="w-full h-full"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : streamingUrl ? (
+                    <a
+                      href={streamingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center px-4 py-2 mt-1 bg-primary/20 text-white rounded hover:bg-primary/30 transition"
+                    >
+                      Abrir transmisión en una pestaña nueva
+                    </a>
+                  ) : (
+                    <p className="text-sm text-gray-400">Muy pronto compartiremos el enlace de streaming para este evento.</p>
+                  )
+                ) : (
+                  <div className="flex items-center gap-3">
+                    <p className="text-sm text-gray-400">El streaming estará disponible a la hora del evento para usuarios con entrada.</p>
+                    {/* Show simulate button if user has ticket */}
+                    {hasTicket ? (
+                      <button className="btn btn-outline btn-sm" onClick={() => setSimulatedStreaming(true)}>
+                        Simular streaming ahora
+                      </button>
+                    ) : (
+                      <button className="btn btn-outline btn-sm" disabled title="Debes comprar una entrada para ver el streaming">
+                        Simular streaming (requiere entrada)
+                      </button>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-2">Comparte el enlace solo con personas autorizadas.</p>
+                {hasTicket && streamingUrl && (
+                  <div className="mt-3 space-y-2">
+                    <button className="btn btn-outline btn-sm" onClick={generateSignedStreamingUrl}>
+                      Generar enlace seguro (firma 30 min)
+                    </button>
+                    {signedLink && (
+                      <div className="text-xs text-gray-300 break-all bg-base-300/60 p-2 rounded border border-base-300">
+                        {signedLink}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
             {zonasAvailability && zonasAvailability.length > 0 && (
               <div className="mt-4">
@@ -194,13 +399,100 @@ export const EventDetailPage = () => {
                 </ul>
               </div>
             )}
+
+            {hasDownloads && (
+              <div className="mt-6">
+                <h3 className="font-semibold mb-2">Material descargable</h3>
+                {mediaLoading && !programAsset && !receiptAsset ? (
+                  <p className="text-sm text-gray-400">Buscando archivos compartidos por el organizador...</p>
+                ) : (
+                  <div className="space-y-3">
+                    {programAsset && (
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-base-300/60 border border-base-300 rounded-lg p-4">
+                        <div>
+                          <p className="text-sm text-gray-400 uppercase tracking-wide">Programa oficial</p>
+                          <p className="font-semibold">{resolveAssetName(programAsset, 'programa.pdf')}</p>
+                        </div>
+                        {programUrl && (
+                          <a
+                            href={programUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center px-4 py-2 rounded bg-primary/80 hover:bg-primary text-white text-sm transition"
+                          >
+                            Descargar PDF
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {receiptAsset && (
+                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 bg-base-300/60 border border-base-300 rounded-lg p-4">
+                        <div>
+                          <p className="text-sm text-gray-400 uppercase tracking-wide">Comprobante de pago</p>
+                          <p className="font-semibold">{resolveAssetName(receiptAsset, 'comprobante')}</p>
+                        </div>
+                        {receiptUrl && (
+                          <a
+                            href={receiptUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center justify-center px-4 py-2 rounded bg-primary/80 hover:bg-primary text-white text-sm transition"
+                          >
+                            Descargar archivo
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {!programAsset && !receiptAsset && (
+                      <p className="text-sm text-gray-400">El organizador aún no ha compartido archivos descargables.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mt-8">
-             <Link to={`/evento/${id}/asientos`}>
-                <Button size="lg" variant="primary" className="w-full md:w-auto shadow-lg hover:shadow-primary/50 transform hover:scale-105">
-                    Comprar Entradas
+            {eventFormat === 'streaming' ? (
+              <Link
+                to="/payment"
+                state={{
+                  selectedSeats: [],
+                  evento,
+                  zonasMap: {},
+                  selectedServiceIds: [],
+                  selectedServices: [],
+                  subtotal: streamingPrice,
+                  servicesTotal: 0,
+                  total: streamingPrice,
+                  streamingPrice,
+                }}
+              >
+                <Button
+                  size="lg"
+                  variant="primary"
+                  className="w-full md:w-auto shadow-lg hover:shadow-primary/50 transform hover:scale-105"
+                >
+                  Comprar Entrada (Streaming)
                 </Button>
+              </Link>
+            ) : (
+              <Link to={`/evento/${id}/asientos`}>
+                <Button
+                  size="lg"
+                  variant="primary"
+                  className="w-full md:w-auto shadow-lg hover:shadow-primary/50 transform hover:scale-105"
+                >
+                  Comprar Entradas
+                </Button>
+              </Link>
+            )}
+            <Link to={`/evento/${id}/foro`}>
+              <Button size="lg" variant="secondary" className="w-full md:w-auto mt-4 md:mt-0 md:ml-4">
+                Abrir foro en vivo
+              </Button>
             </Link>
           </div>
         </div>

@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import api from '../../services/api';
-import type { Evento } from '../../types';
+import eventsApi from '../../services/eventsApi';
+import type { Evento, EventRequest, EventFormat } from '../../types';
 import { Button } from '../../components/ui/Button';
+import { EventCard } from '../../components/EventCard';
 
 // A separate component for the modal form
 const EventForm = ({
@@ -55,15 +56,22 @@ const EventForm = ({
 
 export const AdminEvents = () => {
   const [eventos, setEventos] = useState<Evento[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<EventRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedEvento, setSelectedEvento] = useState<Partial<Evento> | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
 
-  const fetchEventos = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get<Evento[]>('/eventos');
-      setEventos(data);
+      const [eventosData, pendingData] = await Promise.all([
+        eventsApi.getAdminEvents(),
+        eventsApi.getPendingEventRequests(),
+      ]);
+      setEventos(eventosData);
+      setPendingRequests(pendingData);
     } catch (error) {
       console.error('Error fetching eventos:', error);
     } finally {
@@ -72,8 +80,8 @@ export const AdminEvents = () => {
   }, []);
 
   useEffect(() => {
-    fetchEventos();
-  }, [fetchEventos]);
+    fetchAll();
+  }, [fetchAll]);
 
   const handleCreate = () => {
     setSelectedEvento(null);
@@ -112,38 +120,73 @@ export const AdminEvents = () => {
 
   if (loading) return <p>Cargando eventos...</p>;
 
+  // Unir eventos y solicitudes pendientes en una sola lista
+  const allEvents = [
+    ...eventos.map(e => ({ ...e, status: 'APROBADO', categoryId: e.categoryId ?? 'Sin categoría' })),
+    ...pendingRequests.map(r => ({
+      id: r.id,
+      nombre: r.name,
+      descripcion: r.description,
+      fecha: r.date,
+      ubicacion: 'Por definir',
+      posterUrl: '',
+      eventFormat: r.eventFormat,
+      categoryId: r.categoryId ?? 'Sin categoría',
+      status: r.status,
+      isPendingRequest: true,
+    })),
+  ];
+
+  // Filtrado por estado y categoría
+  const filteredEvents = allEvents.filter(e => {
+    const statusMatch = filterStatus === 'all' || e.status === filterStatus;
+    const categoryMatch = filterCategory === 'all' || String(e.categoryId) === filterCategory;
+    return statusMatch && categoryMatch;
+  });
+
+  // Obtener categorías únicas
+  const categories = Array.from(new Set(allEvents.map(e => String(e.categoryId))));
+
   return (
     <div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
         <h1 className="text-3xl font-bold">Gestión de Eventos</h1>
+        <div className="flex gap-2 items-center">
+          <label className="text-gray-300">Estado:</label>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-base-300 text-white rounded px-2 py-1">
+            <option value="all">Todos</option>
+            <option value="APROBADO">Aprobado</option>
+            <option value="PENDIENTE">Por aprobar</option>
+            <option value="RECHAZADO">Rechazado</option>
+          </select>
+          <label className="text-gray-300 ml-4">Categoría:</label>
+          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="bg-base-300 text-white rounded px-2 py-1">
+            <option value="all">Todas</option>
+            {categories.map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
         <Button onClick={handleCreate} variant="primary">Crear Evento</Button>
       </div>
-      <div className="bg-base-200 shadow-md rounded-lg overflow-hidden">
-        <table className="min-w-full">
-          <thead className="bg-base-300">
-            <tr>
-              <th className="text-left py-3 px-4">Nombre</th>
-              <th className="text-left py-3 px-4">Fecha</th>
-              <th className="text-left py-3 px-4">Ubicación</th>
-              <th className="text-left py-3 px-4">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {eventos.map((evento) => (
-              <tr key={evento.id} className="border-b border-base-300 hover:bg-base-300/50">
-                <td className="py-3 px-4">{evento.nombre}</td>
-                <td className="py-3 px-4">{new Date(evento.fecha).toLocaleString()}</td>
-                <td className="py-3 px-4">{evento.ubicacion}</td>
-                <td className="py-3 px-4">
-                  <div className="flex space-x-2">
-                    <Button onClick={() => handleEdit(evento)} variant="ghost" size="sm">Editar</Button>
-                    <Button onClick={() => handleDelete(evento.id)} variant="danger" size="sm">Eliminar</Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredEvents.map(evento => (
+          <div key={evento.id} className="relative">
+            <EventCard evento={evento} />
+            {evento.status === 'PENDIENTE' && (
+              <span className="absolute top-3 right-3 bg-yellow-500 text-black px-3 py-1 rounded-full text-xs font-bold shadow">Por aprobar</span>
+            )}
+            {evento.status === 'RECHAZADO' && (
+              <span className="absolute top-3 right-3 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow">Rechazado</span>
+            )}
+            {evento.isPendingRequest && evento.status === 'PENDIENTE' && (
+              <Button variant="success" className="absolute bottom-3 right-3" onClick={async () => {
+                await eventsApi.approveEventRequest(evento.id);
+                fetchAll();
+              }}>Aprobar</Button>
+            )}
+          </div>
+        ))}
       </div>
       {isModalOpen && <EventForm evento={selectedEvento} onClose={() => setIsModalOpen(false)} onSave={handleSave} />}
     </div>

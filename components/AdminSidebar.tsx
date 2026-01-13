@@ -18,9 +18,9 @@ const navItems = [
   { name: 'Categorías', href: '/admin/categorias', icon: ChatBubbleLeftRightIcon, active: true },
   { name: 'Asientos', href: '/admin/asientos', icon: TicketIcon, active: true },
   { name: 'Reservaciones', href: '/admin/reservaciones', icon: TicketIcon, active: true },
-  { name: 'Pagos', href: '/admin/pagos', icon: CreditCardIcon, active: false },
-  { name: 'Reportes', href: '/admin/reportes', icon: ChartBarIcon, active: false },
-  { name: 'Foros', href: '/admin/foros', icon: ChatBubbleLeftRightIcon, active: false },
+  { name: 'Pagos', href: '/admin/pagos', icon: CreditCardIcon, active: true },
+  { name: 'Reportes', href: '/admin/reportes', icon: ChartBarIcon, active: true },
+  { name: 'Foros', href: '/admin/foros', icon: ChatBubbleLeftRightIcon, active: true },
 ];
 
 export const AdminSidebar = () => {

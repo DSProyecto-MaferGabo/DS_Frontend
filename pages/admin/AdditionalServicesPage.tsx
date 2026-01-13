@@ -125,23 +125,25 @@ export const AdditionalServicesPage = () => {
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <Button onClick={() => setShowCreate(prev => !prev)} variant="primary">
-              {showCreate ? (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                  Ocultar formulario
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Crear Servicio
-                </>
-              )}
-            </Button>
+            {isAdmin && (
+              <Button onClick={() => setShowCreate(prev => !prev)} variant="primary">
+                {showCreate ? (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Ocultar formulario
+                  </>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Crear Servicio
+                  </>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -151,22 +153,18 @@ export const AdditionalServicesPage = () => {
           {message.text}
         </div>
       )}
-      {/* Create form (toggle) */}
-      {showCreate && (
+      {/* Create form (toggle) - only for admins */}
+      {isAdmin && showCreate && (
         <div className="bg-base-200 p-4 rounded-lg mb-6">
           <h2 className="font-semibold mb-3">Crear Servicio</h2>
-          {isAdmin ? (
-            <div className="space-y-2">
-              <input className="w-full p-2 rounded bg-base-100" placeholder="Nombre" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
-              <textarea className="w-full p-2 rounded bg-base-100" placeholder="Descripción" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
-              <input type="number" className="w-full p-2 rounded bg-base-100" placeholder="Precio" value={form.price} onChange={e => setForm({...form, price: Number(e.target.value)})} />
-              <div className="text-right">
-                <Button variant="primary" onClick={async () => { await handleCreate(); setShowCreate(false); }} disabled={creating}>{creating ? 'Creando...' : 'Crear'}</Button>
-              </div>
+          <div className="space-y-2">
+            <input className="w-full p-2 rounded bg-base-100" placeholder="Nombre" value={form.name} onChange={e => setForm({...form, name: e.target.value})} />
+            <textarea className="w-full p-2 rounded bg-base-100" placeholder="Descripción" value={form.description} onChange={e => setForm({...form, description: e.target.value})} />
+            <input type="number" className="w-full p-2 rounded bg-base-100" placeholder="Precio" value={form.price} onChange={e => setForm({...form, price: Number(e.target.value)})} />
+            <div className="text-right">
+              <Button variant="primary" onClick={async () => { await handleCreate(); setShowCreate(false); }} disabled={creating}>{creating ? 'Creando...' : 'Crear'}</Button>
             </div>
-          ) : (
-            <div className="p-3 rounded bg-yellow-100 text-yellow-900">Solo administradores pueden crear servicios.</div>
-          )}
+          </div>
         </div>
       )}
 

@@ -1,7 +1,8 @@
 import Keycloak, { KeycloakInstance } from 'keycloak-js';
 import type { KeycloakProfile } from '../types';
 
-const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080/auth';
+// Prefer new Keycloak base URL without /auth (Keycloak 18+), fallback to legacy
+const KEYCLOAK_URL = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080';
 const KEYCLOAK_REALM = import.meta.env.VITE_KEYCLOAK_REALM || 'ds-repo1';
 const KEYCLOAK_CLIENT = import.meta.env.VITE_KEYCLOAK_CLIENT || 'frontend-spa';
 
@@ -54,10 +55,13 @@ class KeycloakService {
     window.addEventListener('message', msgHandler);
     try {
       authenticated = await this.kc.init({
-        onLoad: 'check-sso',
+        onLoad: 'login-required',
         pkceMethod: 'S256',
         checkLoginIframe: false,
-        silentCheckSsoRedirectUri: silentUri
+        silentCheckSsoRedirectUri: silentUri,
+        checkLoginIframeInterval: 60,
+        enableLogging: false,
+        flow: 'standard'
       });
     } catch (err) {
       console.error('[Keycloak] init() failed:', err);
@@ -121,7 +125,13 @@ class KeycloakService {
     }
     console.debug('[Keycloak] redirecting to Keycloak login');
     // This will redirect the browser to Keycloak's login page
-    this.kc.login();
+    if (this.kc && typeof this.kc.login === 'function') {
+      this.kc.login();
+    } else {
+      // fallback manual redirect
+      const redirectUri = encodeURIComponent(window.location.origin);
+      window.location.href = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth?client_id=${KEYCLOAK_CLIENT}&response_type=code&redirect_uri=${redirectUri}`;
+    }
   }
 
   logout() {
@@ -153,6 +163,35 @@ class KeycloakService {
       const roles = (this.kc.tokenParsed as any)?.realm_access?.roles || [];
       return roles.includes(role);
     } catch (err) {
+      return false;
+    }
+  }
+
+  async updateToken(minValiditySeconds: number = 30): Promise<boolean> {
+    if (!this.authenticated) {
+      console.warn('[Keycloak] updateToken called but user is not authenticated');
+      return false;
+    }
+    try {
+      // keycloak-js exposes updateToken which returns a Promise<boolean> in newer versions
+      if (typeof (this.kc as any).updateToken === 'function') {
+        console.debug(`[Keycloak] Attempting to refresh token with minValidity: ${minValiditySeconds}s`);
+        const refreshed = await (this.kc as any).updateToken(minValiditySeconds);
+        console.debug(`[Keycloak] Token refresh result: ${refreshed}`);
+        if (refreshed) {
+          this.token = this.kc.token || '';
+          console.debug('[Keycloak] Token refreshed successfully');
+          return true;
+        } else {
+          console.warn('[Keycloak] Token refresh returned false - token may have expired');
+          return false;
+        }
+      } else {
+        console.warn('[Keycloak] updateToken method not available on Keycloak instance');
+        return false;
+      }
+    } catch (err) {
+      console.error('[Keycloak] updateToken failed:', err);
       return false;
     }
   }

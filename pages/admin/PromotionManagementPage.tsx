@@ -24,12 +24,20 @@ const PromotionManagementPage: React.FC = () => {
     setLoading(true);
     try {
       const [evts, promos, res] = await Promise.all([
-        eventsApi.getEvents(),
+        eventsApi.getMyEvents(),
         eventsApi.getPromotions(),
         reservationsApi.getReservations(),
       ]);
       setEvents(evts || []);
-      setPromotions(promos || []);
+      
+      // Filter promotions to only those for the organizer's events
+      const eventIds = new Set((evts || []).map((e: any) => e.id));
+      const filteredPromos = (promos || []).filter((p: any) => {
+        const eventId = Number(p.eventId ?? p.EventId ?? p.event ?? p.eventoId ?? 0);
+        return eventIds.has(eventId);
+      });
+      setPromotions(filteredPromos);
+      
       setReservations(res || []);
     } catch (err) {
       console.error('Error loading promotions management data', err);

@@ -1,14 +1,18 @@
 
 import React, { createContext, useState, useEffect, ReactNode } from 'react';
 import keycloak from '../services/keycloakService';
-import api, { createUserFromAuth } from '../services/api';
-import type { KeycloakProfile } from '../types';
+import { createUserFromAuth, getUserByEmail, getUserPermissions } from '../services/api';
+import type { KeycloakProfile, ManagedUser, UserPermissions } from '../types';
 
 interface IKeycloakContext {
   authenticated: boolean;
   keycloakInstance: typeof keycloak;
   profile: KeycloakProfile | null;
   isInitializing: boolean;
+  userRecord: ManagedUser | null;
+  permissions: UserPermissions | null;
+  isLoadingUserContext: boolean;
+  refreshUserContext: () => Promise<void>;
 }
 
 export const KeycloakContext = createContext<IKeycloakContext | undefined>(undefined);
@@ -17,6 +21,44 @@ export const KeycloakProvider = ({ children }: { children: ReactNode }) => {
   const [authenticated, setAuthenticated] = useState(false);
   const [profile, setProfile] = useState<KeycloakProfile | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [userRecord, setUserRecord] = useState<ManagedUser | null>(null);
+  const [permissions, setPermissions] = useState<UserPermissions | null>(null);
+  const [isLoadingUserContext, setIsLoadingUserContext] = useState(false);
+
+  const loadUserContext = async (emailOverride?: string) => {
+    if (!authenticated) {
+      setUserRecord(null);
+      setPermissions(null);
+      return;
+    }
+    const email = emailOverride || keycloak.profile?.email || profile?.email || '';
+    if (!email || isLoadingUserContext) {
+      return;
+    }
+    setIsLoadingUserContext(true);
+    try {
+      const user = await getUserByEmail(email);
+      setUserRecord(user);
+      if (user?.id) {
+        const perms = await getUserPermissions(user.id);
+        setPermissions(perms);
+      } else {
+        setPermissions(null);
+      }
+    } catch (err) {
+      console.error('[KeycloakContext] failed to load user context', err);
+      setUserRecord(null);
+      setPermissions(null);
+    } finally {
+      setIsLoadingUserContext(false);
+    }
+  };
+
+  const refreshUserContext = async () => {
+    const email = profile?.email || keycloak.profile?.email;
+    if (!email) return;
+    await loadUserContext(email);
+  };
 
   useEffect(() => {
     // pass a callback so the service can notify us when auth state changes
@@ -48,11 +90,25 @@ export const KeycloakProvider = ({ children }: { children: ReactNode }) => {
     });
   }, []);
 
+  useEffect(() => {
+    if (authenticated && profile?.email) {
+      loadUserContext(profile.email);
+    }
+    if (!authenticated) {
+      setUserRecord(null);
+      setPermissions(null);
+    }
+  }, [authenticated, profile?.email]);
+
   const contextValue = {
     authenticated,
     keycloakInstance: keycloak,
     profile,
-    isInitializing
+    isInitializing,
+    userRecord,
+    permissions,
+    isLoadingUserContext,
+    refreshUserContext
   };
 
   return (

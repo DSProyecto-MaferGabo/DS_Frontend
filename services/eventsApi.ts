@@ -1,8 +1,10 @@
 import keycloak from './keycloakService';
+import type { EventRequest, EventFormat } from '../types';
 
 // Default to the API Gateway with the '/api' prefix so production builds
 // talk to the gateway. Override with VITE_EVENTS_API_URL in env when needed.
 const BASE_URL = import.meta.env.VITE_EVENTS_API_URL || 'http://localhost:5278/api';
+const POSTER_PLACEHOLDER = 'https://picsum.photos/seed/ds-events/900/600';
 
 type Json = any;
 
@@ -51,8 +53,29 @@ async function request<T>(path: string, method = 'GET', body?: any): Promise<T> 
   }
 }
 
+const normalizeFormat = (value: any): EventFormat => {
+  const normalized = (value ?? '').toString().trim().toLowerCase();
+  if (normalized === 'streaming' || normalized === 'hibrido') return normalized;
+  return 'presencial';
+};
+
+const normalizeStreamingUrl = (value: any): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
 // Map backend EventDto -> frontend Evento
 function mapEvent(dto: any) {
+  const pickPosterUrl = () => {
+    const raw = dto.posterUrl ?? dto.PosterUrl ?? dto.poster_url ?? dto.posterURL;
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+  const posterUrl = pickPosterUrl() ?? POSTER_PLACEHOLDER;
+  const eventFormat = normalizeFormat(dto.eventFormat ?? dto.EventFormat);
+  const streamingUrl = normalizeStreamingUrl(dto.streamingUrl ?? dto.StreamingUrl);
   return {
     id: dto.id,
     nombre: dto.name,
@@ -61,10 +84,16 @@ function mapEvent(dto: any) {
     hora: dto.time ?? dto.Time ?? null,
     // Prefer an explicit location from the DTO when present; avoid defaulting to `Escenario ${stageId}`
     ubicacion: dto.location ?? dto.ubicacion ?? '',
-    posterUrl: `https://picsum.photos/seed/event-${dto.id}/800/500`,
+    posterUrl,
+    posterStorageObjectKey: dto.posterStorageObjectKey ?? dto.PosterStorageObjectKey ?? null,
     stageId: dto.stageId,
+  // Precio general para eventos sin asientos (streaming / tarifa única)
+  generalPrice: dto.generalPrice ?? dto.GeneralPrice ?? dto.price ?? dto.Price ?? null,
   // keep category information if present so frontend can filter by category
   categoryId: dto.categoryId ?? dto.CategoryId ?? dto.category?.id ?? dto.category?.Id ?? null,
+  eventFormat,
+  streamingUrl,
+  ownerId: dto.ownerId ?? dto.OwnerId ?? dto.ownerSub ?? dto.OwnerSub ?? null,
   // include state/raw status so UI can decide visibility (published/cancelled/etc)
   state: (dto.state ?? dto.State ?? dto.estado ?? dto.status ?? dto.Status ?? null),
   // explicit flags from backend when available
@@ -78,6 +107,25 @@ function mapEvent(dto: any) {
       return s ? (String(s).toLowerCase().includes('publ') || String(s).toLowerCase().includes('activo') || String(s).toLowerCase().includes('publicado')) : false;
     } catch { return false; }
   })(),
+  };
+}
+
+function mapEventRequest(dto: any): EventRequest {
+  return {
+    id: dto.id ?? dto.Id,
+    name: dto.name ?? dto.Name ?? '',
+    description: dto.description ?? dto.Description ?? '',
+    date: dto.date ?? dto.Date ?? '',
+    time: dto.time ?? dto.Time ?? null,
+    stageId: dto.stageId ?? dto.StageId,
+    categoryId: dto.categoryId ?? dto.CategoryId ?? null,
+    eventFormat: normalizeFormat(dto.eventFormat ?? dto.EventFormat),
+    streamingUrl: normalizeStreamingUrl(dto.streamingUrl ?? dto.StreamingUrl),
+    ownerSub: dto.ownerSub ?? dto.OwnerSub ?? '',
+    status: dto.status ?? dto.Status ?? 'Desconocido',
+    createdAt: dto.createdAt ?? dto.CreatedAt ?? new Date().toISOString(),
+    approvedAt: dto.approvedAt ?? dto.ApprovedAt ?? null,
+    rejectedAt: dto.rejectedAt ?? dto.RejectedAt ?? null,
   };
 }
 
@@ -122,12 +170,15 @@ export default {
     const dto = await request<Json>(`/Events/${id}`);
     return mapEvent(dto);
   },
-  createEvent: async (payload: { name: string; description: string; date: string; time?: string | null; stageId: number; categoryId?: number | null }) => {
+  createEvent: async (payload: { name: string; description: string; date: string; time?: string | null; stageId: number; categoryId?: number | null; eventFormat: EventFormat; streamingUrl?: string | null; posterUrl?: string | null; posterStorageObjectKey?: string | null }) => {
     const created = await request<Json>('/Events', 'POST', payload);
     return created; // controller returns { id, message }
   },
-  updateEvent: async (id: number, payload: { name: string; description: string; date: string; stageId: number; categoryId?: number | null }) => {
+  updateEvent: async (id: number, payload: { name: string; description: string; date: string; stageId: number; categoryId?: number | null; eventFormat: EventFormat; streamingUrl?: string | null; posterUrl?: string | null; posterStorageObjectKey?: string | null }) => {
     return request(`/Events/${id}`, 'PUT', payload);
+  },
+  updatePoster: async (id: number, payload: { posterUrl?: string | null; posterStorageObjectKey?: string | null }) => {
+    return request(`/Events/${id}/poster`, 'PUT', payload);
   },
   deleteEvent: async (id: number) => {
     return request(`/Events/${id}`, 'DELETE');
@@ -176,6 +227,22 @@ export default {
         estado: 'disponible' as const,
       };
     });
+    // If backend did not provide meaningful fila/numero values (all default to R1/1),
+    // compute them client-side: every 10 seats create a new fila, numeros 1..10
+    const allDefaultFila = seats.length > 0 && seats.every(se => se.fila === 'R1');
+    const allDefaultNumero = seats.length > 0 && seats.every(se => se.numero === '1');
+    if (allDefaultFila && allDefaultNumero) {
+      for (let i = 0; i < seats.length; i++) {
+        const rowIndex = Math.floor(i / 10) + 1;
+        const seatNumber = (i % 10) + 1;
+        seats[i].fila = `R${rowIndex}`;
+        seats[i].numero = String(seatNumber);
+        // update id if it was generated from fila/numero pattern
+        if (!seats[i].rawId) {
+          seats[i].id = `${seats[i].escenarioId}-${seats[i].fila}-${seats[i].numero}`;
+        }
+      }
+    }
 
     return { seats, zonas };
   },
@@ -189,5 +256,64 @@ export default {
   createPromotion: async (payload: any) => request<Json>('/Promotion', 'POST', payload),
   updatePromotion: async (id: number, payload: any) => request<Json>(`/Promotion/${id}`, 'PUT', payload),
   deletePromotion: async (id: number) => request<Json>(`/Promotion/${id}`, 'DELETE'),
+
+  getMyEvents: async () => {
+    const data = await request<Json[]>('/events/my-events');
+    return (data || []).map(mapEvent);
+  },
+
+  getAdminEvents: async () => {
+    const data = await request<Json[]>('/admin/events');
+    return (data || []).map(mapEvent);
+  },
+
+  // Event Requests (organizador + admin/soporte)
+  createEventRequest: async (payload: {
+    name: string;
+    description: string;
+    date: string;
+    time?: string | null;
+    stageId: number;
+    categoryId?: number | null;
+    eventFormat: EventFormat;
+    streamingUrl?: string | null;
+    zones?: Array<{ name: string; price: number; seatCount: number }>; // Made optional
+    posterFile?: File;
+    programFile?: File;
+    receiptFile?: File;
+  }) => {
+    // Send complete payload including zones (empty array if not provided)
+    const completePayload = {
+      name: payload.name,
+      description: payload.description,
+      date: payload.date,
+      time: payload.time,
+      stageId: payload.stageId,
+      categoryId: payload.categoryId,
+      eventFormat: payload.eventFormat,
+      streamingUrl: payload.streamingUrl,
+      zones: payload.zones || []
+    };
+    return request<Json>('/event-requests', 'POST', completePayload);
+  },
+  getMyEventRequests: async () => {
+    const data = await request<Json[]>('/event-requests/my');
+    return (data || []).map(mapEventRequest);
+  },
+  getPendingEventRequests: async () => {
+    const data = await request<Json[]>('/event-requests/pending');
+    return (data || []).map(mapEventRequest);
+  },
+  approveEventRequest: async (id: number) => {
+    return request<Json>(`/event-requests/${id}/approve`, 'POST');
+  },
 };
+
+export async function getPromotionReport() {
+  // Simulación: reemplaza con endpoint real
+  return [
+    { code: 'PROMO10', description: '10% de descuento', redemptions: 25, validUntil: '2026-02-01' },
+    { code: 'PROMO20', description: '20% de descuento', redemptions: 12, validUntil: '2026-03-01' },
+  ];
+}
 

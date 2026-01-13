@@ -14,6 +14,7 @@ import { SeatSelectionPage } from './pages/client/SeatSelectionPage';
 import { CheckoutPage } from './pages/client/CheckoutPage';
 import { UserProfile } from './pages/client/UserProfile';
 import { PaymentPage } from './pages/client/PaymentPage';
+import { EventForumPage } from './pages/client/EventForumPage';
 
 // Admin Pages
 import { EventManagementPage } from './pages/admin/EventManagementPage';
@@ -25,8 +26,17 @@ import { UserManagementPage } from './pages/admin/UserManagementPage';
 import { ReservationManagementPage } from './pages/admin/ReservationManagementPage';
 import { AdditionalServicesPage } from './pages/admin/AdditionalServicesPage';
 import { ComingSoonPage } from './pages/admin/ComingSoonPage';
+import PaymentsAdminPage from './pages/admin/PaymentsAdminPage';
+import ReportsAdminPage from './pages/admin/ReportsAdminPage';
 import CategoryManagementPage from './pages/admin/CategoryManagementPage';
 import CategoryEventsPage from './pages/admin/CategoryEventsPage';
+import OrganizerDashboardPage from './pages/admin/OrganizerDashboardPage';
+import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import SupportDashboardPage from './pages/admin/SupportDashboardPage';
+import { OrganizerAccountsPage, SupportAccountsPage } from './pages/admin/ManagedAccountsPage';
+import SurveyInvitationsPage from './pages/admin/SurveyInvitationsPage';
+import ForumMonitorPage from './pages/admin/ForumMonitorPage';
+import EventRequestPage from './pages/admin/EventRequestPage';
 
 export const Router = () => {
     const { isInitializing } = useKeycloak();
@@ -46,6 +56,9 @@ export const Router = () => {
                 <Route path="evento/:id/asientos" element={
                     <ProtectedRoute loginRequired children={<SeatSelectionPage />} />
                 } />
+                <Route path="evento/:id/foro" element={
+                    <ProtectedRoute loginRequired children={<EventForumPage />} />
+                } />
                  {/* FIX: Explicitly pass children to ProtectedRoute to fix type error */}
                  <Route path="checkout" element={
                     <ProtectedRoute loginRequired children={<CheckoutPage />} />
@@ -62,22 +75,78 @@ export const Router = () => {
             {/* Admin Routes */}
             {/* FIX: Explicitly pass children to ProtectedRoute to fix type error */}
             <Route path="/admin" element={
-                <ProtectedRoute roles={['organizador', 'administrador']} children={<AdminLayout />} />
+                <ProtectedRoute
+                    roles={['organizador', 'administrador', 'soporte']}
+                    privileges={['PLATFORM_VIEW_DASHBOARD', 'EVENT_MANAGE_OWN', 'EVENT_MANAGE_ALL', 'USER_READ_ALL']}
+                    children={<AdminLayout />}
+                />
             }>
-                <Route index element={<Navigate to="eventos" replace />} />
-                <Route path="eventos" element={<EventManagementPage />} />
-                <Route path="eventos/crear" element={<EventCreationPage />} />
-                <Route path="eventos/:id/editar" element={<EventEditPage />} />
-                <Route path="usuarios" element={<UserManagementPage />} />
-                <Route path="escenarios" element={<StageManagementPage />} />
-                <Route path="promociones" element={<PromotionManagementPage />} />
-                <Route path="reservaciones" element={<ReservationManagementPage />} />
-                <Route path="servicios" element={<AdditionalServicesPage />} />
-                <Route path="categorias" element={<CategoryManagementPage />} />
-                <Route path="categorias/:id/eventos" element={<CategoryEventsPage />} />
-                <Route path="pagos" element={<ComingSoonPage />} />
-                <Route path="reportes" element={<ComingSoonPage />} />
-                <Route path="foros" element={<ComingSoonPage />} />
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<ProtectedRoute roles={['organizador', 'administrador', 'soporte']} privileges={['PLATFORM_VIEW_DASHBOARD']} children={<AdminDashboardPage />} />} />
+                import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+                <Route path="organizador" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN']} children={<OrganizerDashboardPage />} />
+                } />
+                <Route path="soporte" element={
+                    <ProtectedRoute roles={['soporte', 'administrador']} privileges={['PLATFORM_VIEW_DASHBOARD', 'LOGS_VIEW']} children={<SupportDashboardPage />} />
+                } />
+                <Route path="eventos" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN', 'EVENT_MANAGE_ALL']} children={<EventManagementPage />} />
+                } />
+                <Route path="eventos/crear" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_CREATE']} children={<EventCreationPage />} />
+                } />
+                <Route path="eventos/solicitar" element={
+                    <EventRequestPage />
+                } />
+                <Route path="eventos/:id/editar" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN', 'EVENT_MANAGE_ALL']} children={<EventEditPage />} />
+                } />
+                <Route path="usuarios" element={
+                    <ProtectedRoute roles={['administrador']} privileges={['USER_READ_ALL']} children={<UserManagementPage />} />
+                } />
+                <Route path="organizers" element={
+                    <ProtectedRoute roles={['administrador']} privileges={['USER_MANAGE_STATUS']} children={<OrganizerAccountsPage />} />
+                } />
+                <Route path="support" element={
+                    <ProtectedRoute roles={['administrador']} privileges={['USER_MANAGE_STATUS']} children={<SupportAccountsPage />} />
+                } />
+                <Route path="escenarios" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN', 'EVENT_MANAGE_ALL']} children={<StageManagementPage />} />
+                } />
+                <Route path="promociones" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_ALL', 'EVENT_MANAGE_OWN']} children={<PromotionManagementPage />} />
+                } />
+                <Route path="reservaciones" element={
+                    <ProtectedRoute roles={['administrador', 'organizador', 'soporte']} privileges={['RESERVATION_READ_ALL']} children={<ReservationManagementPage />} />
+                } />
+                <Route path="encuestas" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN', 'EVENT_MANAGE_ALL']} children={<SurveyInvitationsPage />} />
+                } />
+                <Route path="servicios" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_ALL', 'EVENT_MANAGE_OWN']} children={<AdditionalServicesPage />} />
+                } />
+                <Route path="categorias" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_ALL', 'EVENT_MANAGE_OWN']} children={<CategoryManagementPage />} />
+                } />
+                <Route path="categorias/:id/eventos" element={
+                    <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_ALL', 'EVENT_MANAGE_OWN']} children={<CategoryEventsPage />} />
+                } />
+                <Route path="pagos" element={
+                    <ProtectedRoute
+                        roles={['administrador', 'organizador', 'soporte']}
+                        children={<PaymentsAdminPage />}
+                    />
+                } />
+                <Route path="reportes" element={
+                    <ProtectedRoute
+                        roles={['administrador', 'soporte', 'organizador']}
+                        children={<ReportsAdminPage />}
+                    />
+                } />
+                <Route path="foros" element={
+                    <ProtectedRoute roles={['administrador', 'soporte', 'organizador']} children={<ForumMonitorPage />} />
+                } />
             </Route>
 
             {/* Fallback Route */}

@@ -22,6 +22,9 @@ const UserMenu = () => {
           {keycloakInstance.hasRealmRole('administrador') && (
             <Link to="/admin" className="block px-4 py-2 text-sm text-gray-300 hover:bg-primary hover:text-white" onClick={() => setIsOpen(false)}>Panel Admin</Link>
           )}
+          {keycloakInstance.hasRealmRole('organizador') && (
+            <Link to="/admin/organizador" className="block px-4 py-2 text-sm text-gray-300 hover:bg-primary hover:text-white" onClick={() => setIsOpen(false)}>Panel Organizador</Link>
+          )}
           <button
             onClick={() => keycloakInstance.logout()}
             className="block w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500 hover:text-white"

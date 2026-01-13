@@ -29,7 +29,7 @@ export const EventManagementPage = () => {
   const fetchEventos = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await eventsApi.getEvents();
+      const data = await eventsApi.getMyEvents();
       // also load stages to display human-friendly stage names
       try {
         const stages = await eventsApi.getStages();

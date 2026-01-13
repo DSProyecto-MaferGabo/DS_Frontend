@@ -34,7 +34,7 @@ export const ReservationManagementPage = () => {
             }
 
             try {
-                eventosData = await eventsApi.getEvents();
+                eventosData = await eventsApi.getMyEvents();
             } catch (e) {
                 console.warn('Could not load events (continuing with empty list):', e);
                 eventosData = [];
@@ -79,7 +79,7 @@ export const ReservationManagementPage = () => {
                 ...res,
                 evento: eventosMap.get(res.eventoId),
                 usuario: usuariosMap.get(res.usuarioId) ?? usuariosByEmail.get(String((res.usuarioEmail || res.usuario?.email || '')).toLowerCase())
-            }));
+            })).filter((res: any) => res.evento); // Filter to only reservations for organizer's events
 
             // If we couldn't list users (forbidden), try to enrich reservations by querying user-by-email per reservation
             const tryEnrichUsersByEmail = async (list: any[]) => {

@@ -13,9 +13,12 @@ export const ClientLayout = () => {
   useEffect(() => {
     if (!prevAuthRef.current && authenticated) {
       // Just logged in
-      const isAdmin = keycloakInstance.hasRealmRole('administrador') || keycloakInstance.hasRealmRole('organizador');
+      const isAdmin = keycloakInstance.hasRealmRole('administrador');
+      const isOrganizer = keycloakInstance.hasRealmRole('organizador');
       if (isAdmin) {
         navigate('/admin', { replace: true });
+      } else if (isOrganizer) {
+        navigate('/admin/organizador', { replace: true });
       } else {
         // Send clients to events (home)
         navigate('/', { replace: true });

@@ -1,11 +1,23 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import type { Evento } from '../../types';
+import type { Evento, EventFormat } from '../../types';
 import { CalendarIcon, MapPinIcon } from '@heroicons/react/24/solid';
 
 interface EventCardProps {
   evento: Evento;
 }
+
+const FORMAT_LABELS: Record<EventFormat, string> = {
+  presencial: 'Presencial',
+  streaming: 'Streaming',
+  hibrido: 'Híbrido',
+};
+
+const FORMAT_BADGE_CLASSES: Record<EventFormat, string> = {
+  presencial: 'bg-emerald-500/90 text-black',
+  streaming: 'bg-indigo-500 text-white',
+  hibrido: 'bg-amber-400 text-black',
+};
 
 export const EventCard: React.FC<EventCardProps> = ({ evento }) => {
   // Parse fecha (YYYY-MM-DD) as a local date to avoid timezone shifts when using new Date(string)
@@ -45,12 +57,17 @@ export const EventCard: React.FC<EventCardProps> = ({ evento }) => {
     }
   })() : null;
 
+  const eventFormat = ((evento as any).eventFormat ?? 'presencial') as EventFormat;
+
   return (
     <Link to={`/evento/${evento.id}`} className="block group">
       <div className="bg-base-200 rounded-lg overflow-hidden shadow-lg hover:shadow-primary/50 transition-all duration-300 transform hover:-translate-y-1 flex flex-col h-full">
         <div className="relative">
             <img className="w-full h-80 object-cover" src={evento.posterUrl} alt={evento.nombre} />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+            <span className={`absolute top-3 left-3 z-10 text-xs tracking-wide font-semibold px-3 py-1 rounded-full shadow ${FORMAT_BADGE_CLASSES[eventFormat]}`}>
+              {FORMAT_LABELS[eventFormat]}
+            </span>
         </div>
         <div className="p-6 flex flex-col flex-grow">
           <h3 className="text-xl font-bold text-white mb-2 group-hover:text-primary transition-colors">{evento.nombre}</h3>

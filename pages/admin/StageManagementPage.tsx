@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import eventsApi from '../../services/eventsApi';
 import { Button } from '../../components/ui/Button';
+import { useKeycloak } from '../../hooks/useKeycloak';
 
 export const StageManagementPage = () => {
   const [stages, setStages] = useState<any[]>([]);
@@ -16,6 +17,8 @@ export const StageManagementPage = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [eventsByDate, setEventsByDate] = useState<Record<string, any[]>>({});
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const { profile } = useKeycloak();
+  const isAdmin = (profile?.roles || []).includes('administrador');
 
   const fetch = async () => {
     setLoading(true);
@@ -36,7 +39,7 @@ export const StageManagementPage = () => {
 
   const loadEventsForStage = async (stageId: number) => {
     try {
-      const all = await eventsApi.getEvents();
+      const all = await eventsApi.getMyEvents();
       const stageEvents = (all || []).filter((e: any) => e.stageId === stageId);
       const map: Record<string, any[]> = {};
       stageEvents.forEach((ev: any) => {
@@ -50,6 +53,7 @@ export const StageManagementPage = () => {
   };
 
   const handleCreate = async () => {
+    if (!isAdmin) return alert('Solo un administrador puede crear escenarios.');
     try {
       await eventsApi.createStage({ name, peoplecapacity: capacity, location });
       setName(''); setCapacity(100); setLocation('');
@@ -57,10 +61,11 @@ export const StageManagementPage = () => {
     } catch (err) { console.error(err); alert('Error al crear escenario'); }
   };
 
-  const handleEditStart = (s: any) => { setEditing(s); setName(s.Name ?? s.name ?? ''); setCapacity(s.peoplecapacity ?? 100); setLocation(s.location ?? ''); };
+  const handleEditStart = (s: any) => { if (!isAdmin) return; setEditing(s); setName(s.Name ?? s.name ?? ''); setCapacity(s.peoplecapacity ?? 100); setLocation(s.location ?? ''); };
   const handleCancelEdit = () => { setEditing(null); setName(''); setCapacity(100); setLocation(''); };
   const handleSaveEdit = async () => {
     if (!editing) return;
+    if (!isAdmin) return alert('Solo un administrador puede editar escenarios.');
     try {
       await eventsApi.updateStage(editing.Id ?? editing.id, { Name: name, peoplecapacity: capacity, location });
       handleCancelEdit(); fetch();
@@ -68,6 +73,7 @@ export const StageManagementPage = () => {
   };
 
   const handleDelete = async (id: number) => {
+    if (!isAdmin) return alert('Solo un administrador puede eliminar escenarios.');
     if (!confirm('¿Eliminar escenario? Esta acción no elimina eventos.')) return;
     try { await eventsApi.deleteStage(id); fetch(); if (selectedStageId === id) setSelectedStageId(null); } catch (e) { console.error(e); alert('Error al eliminar'); }
   };
@@ -100,7 +106,7 @@ export const StageManagementPage = () => {
       <div className="bg-base-200 p-4 rounded-lg mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-semibold">Crear / Editar Escenario</h2>
-          {!editing && (
+          {isAdmin && !editing && (
             <Button onClick={() => setShowCreate(prev => !prev)} variant="primary" size="sm" aria-label="Mostrar crear escenario">
               {showCreate ? (
                 <>
@@ -121,7 +127,7 @@ export const StageManagementPage = () => {
           )}
         </div>
 
-        {(editing || showCreate) ? (
+        {isAdmin && (editing || showCreate) ? (
           <>
             <label className="block text-sm">Nombre</label>
             <input className="w-full p-2 mb-2 bg-base-100 rounded" value={name} onChange={e => setName(e.target.value)} />
@@ -141,7 +147,7 @@ export const StageManagementPage = () => {
             </div>
           </>
         ) : (
-          <div className="text-gray-500">Pulsa "Crear Escenario" para abrir el formulario de creación.</div>
+          <div className="text-gray-500">Solo los administradores pueden crear o modificar escenarios.</div>
         )}
       </div>
 
@@ -166,16 +172,20 @@ export const StageManagementPage = () => {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3M3 11h18M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
                   </Button>
+                  {isAdmin && (
                   <Button onClick={() => handleEditStart(s)} variant="ghost" size="sm" aria-label="Editar escenario">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M4 13.5V19h5.5L19.5 8.999l-5.5-5.5L4 13.5z" />
                     </svg>
                   </Button>
+                  )}
+                  {isAdmin && (
                   <Button onClick={() => handleDelete(s.Id ?? s.id)} variant="danger" size="sm" aria-label="Eliminar escenario">
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6" />
                     </svg>
                   </Button>
+                  )}
                 </div>
               </div>
             </div>

@@ -10,23 +10,43 @@ import {
   ChatBubbleLeftRightIcon,
   TagIcon,
   HomeIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
+  ClipboardDocumentListIcon,
+  UserPlusIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 
-const navItems = [
-  { name: 'Eventos', href: '/admin/eventos', icon: CalendarIcon, active: true },
-    { name: 'Escenarios', href: '/admin/escenarios', icon: CalendarIcon, active: true },
-  { name: 'Promociones', href: '/admin/promociones', icon: TicketIcon, active: true },
-  { name: 'Usuarios', href: '/admin/usuarios', icon: UsersIcon, active: true },
-    { name: 'Servicios', href: '/admin/servicios', icon: CreditCardIcon, active: true },
-  { name: 'Categorías', href: '/admin/categorias', icon: TagIcon, active: true },
-  { name: 'Reservaciones', href: '/admin/reservaciones', icon: TicketIcon, active: true },
-  { name: 'Pagos', href: '/admin/pagos', icon: CreditCardIcon, active: false },
-  { name: 'Reportes', href: '/admin/reportes', icon: ChartBarIcon, active: false },
-  { name: 'Foros', href: '/admin/foros', icon: ChatBubbleLeftRightIcon, active: false },
+type NavItem = {
+  name: string;
+  href: string;
+  icon: (props: React.ComponentProps<'svg'>) => JSX.Element;
+  active: boolean;
+  roles?: string[];
+};
+
+const navItems: NavItem[] = [
+  { name: 'Panel Organizador', href: '/admin/organizador', icon: SparklesIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'Panel Soporte', href: '/admin/soporte', icon: ShieldCheckIcon, active: true, roles: ['administrador', 'soporte'] },
+  { name: 'Eventos', href: '/admin/eventos', icon: CalendarIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'Escenarios', href: '/admin/escenarios', icon: CalendarIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'Promociones', href: '/admin/promociones', icon: TicketIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'Usuarios', href: '/admin/usuarios', icon: UsersIcon, active: true, roles: ['administrador'] },
+  { name: 'Gestión Organizadores', href: '/admin/organizers', icon: UserPlusIcon, active: true, roles: ['administrador'] },
+  { name: 'Gestión Soporte', href: '/admin/support', icon: UserPlusIcon, active: true, roles: ['administrador'] },
+  { name: 'Servicios', href: '/admin/servicios', icon: CreditCardIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'Categorías', href: '/admin/categorias', icon: TagIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'Reservaciones', href: '/admin/reservaciones', icon: TicketIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
+  { name: 'Encuestas', href: '/admin/encuestas', icon: EnvelopeIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'Permisos', href: '/admin/permisos', icon: ClipboardDocumentListIcon, active: true },
+  { name: 'Pagos', href: '/admin/pagos', icon: CreditCardIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
+  { name: 'Reportes', href: '/admin/reportes', icon: ChartBarIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
+  { name: 'Foros', href: '/admin/foros', icon: ChatBubbleLeftRightIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
 ];
 
 export const AdminSidebar = () => {
   const { profile, authenticated, keycloakInstance } = useKeycloak();
+  const roleSet = new Set(profile?.roles || []);
 
   const AuthGreeting = () => (
     <div className="bg-base-100 p-3 rounded">
@@ -66,7 +86,7 @@ export const AdminSidebar = () => {
       </div>
       <nav className="flex-grow">
         <ul className="space-y-2">
-          {navItems.map((item) => (
+          {navItems.filter((item) => !item.roles || item.roles.some((role) => roleSet.has(role))).map((item) => (
             <li key={item.name}>
               <NavLink
                 to={item.href}

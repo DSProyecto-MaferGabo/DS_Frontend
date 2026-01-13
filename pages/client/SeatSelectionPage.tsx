@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import eventsApi from '../../services/eventsApi';
 import reservationsApi from '../../services/reservationsApi';
+import { joinEventChannel, leaveEventChannel, registerSeatUpdateHandler, type SeatUpdatePayload } from '../../services/notificationHubClient';
 // FIX: Import the Escenario type.
 import type { Evento, Asiento, Zona, Escenario } from '../../types';
 import { Button } from '../../components/ui/Button';
@@ -17,6 +18,8 @@ export const SeatSelectionPage = () => {
   const [holdExpires, setHoldExpires] = useState<string | null>(null);
   const [holdToken, setHoldToken] = useState<string | null>(null);
   const [holdRemaining, setHoldRemaining] = useState<number>(0);
+  const [holdExpiresIso, setHoldExpiresIso] = useState<string | null>(null);
+  const [updatingHold, setUpdatingHold] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -25,6 +28,26 @@ export const SeatSelectionPage = () => {
       try {
         const eventDto = await eventsApi.getEvent(Number(eventoId));
         setEvento(eventDto);
+        const eventFormat = (eventDto as any).eventFormat ?? 'presencial';
+        if (eventFormat === 'streaming') {
+          const streamingPrice = Number((eventDto as any).generalPrice ?? 0) || 0;
+          // Redirigir directamente a pago para eventos de streaming (sin asientos)
+          navigate('/payment', {
+            replace: true,
+            state: {
+              selectedSeats: [],
+              evento: eventDto,
+              zonasMap: {},
+              selectedServiceIds: [],
+              selectedServices: [],
+              subtotal: streamingPrice,
+              servicesTotal: 0,
+              total: streamingPrice,
+              streamingPrice,
+            },
+          });
+          return;
+        }
         const stageId = eventDto.stageId;
         if (stageId) {
           const { seats: mappedSeats, zonas: mappedZonas } = await eventsApi.getSeats(stageId);
@@ -64,12 +87,13 @@ export const SeatSelectionPage = () => {
           if (token && expires) {
             setHoldToken(token);
             setHoldExpires(expires);
+            setHoldExpiresIso(expires);
             const updateRemaining = () => {
               const remaining = Math.max(0, Math.floor((new Date(expires).getTime() - Date.now()) / 1000));
               setHoldRemaining(remaining);
               if (remaining <= 0) {
                 // clear
-                setHoldToken(null); setHoldExpires(null); sessionStorage.removeItem(`hold_token_${eventoId}`); sessionStorage.removeItem(`hold_expires_${eventoId}`);
+                setHoldToken(null); setHoldExpires(null); setHoldExpiresIso(null); sessionStorage.removeItem(`hold_token_${eventoId}`); sessionStorage.removeItem(`hold_expires_${eventoId}`);
               }
             };
             updateRemaining();
@@ -87,6 +111,63 @@ export const SeatSelectionPage = () => {
     fetchData();
   }, [eventoId]);
 
+  // Real-time updates via NotificationHub (SeatsReserved/Released/Sold)
+  useEffect(() => {
+    if (!eventoId) return;
+    const eventNumeric = Number(eventoId);
+    if (Number.isNaN(eventNumeric)) return;
+
+    let mounted = true;
+    let unsubscribe: (() => void) | null = null;
+
+    const applySeatStatus = (seatCode: string, status: string) => {
+      const normalized = status.toUpperCase();
+      setAsientos(prev => prev.map(seat => {
+        if (String(seat.id) !== seatCode) return seat;
+        if (normalized === 'RESERVED') return { ...seat, estado: 'hold' };
+        if (normalized === 'RELEASED') return { ...seat, estado: 'disponible' };
+        if (normalized === 'SOLD') return { ...seat, estado: 'ocupado' };
+        return seat;
+      }));
+
+      if (normalized === 'RESERVED' || normalized === 'SOLD') {
+        setSelectedSeats(prev => {
+          const filtered = prev.filter(s => String(s.id) !== seatCode);
+          if (filtered.length !== prev.length) {
+            alert('Algunos asientos fueron tomados por otro usuario. Actualizamos tu selección.');
+          }
+          return filtered;
+        });
+      }
+    };
+
+    (async () => {
+      try {
+        await joinEventChannel(eventNumeric);
+        unsubscribe = await registerSeatUpdateHandler((payload: SeatUpdatePayload) => {
+          if (!mounted || !payload) return;
+          const payloadEventId = Number(payload.eventId ?? (payload as any).EventId ?? 0);
+          if (payloadEventId !== eventNumeric) return;
+          const seatCode = String(payload.seatCode ?? (payload as any).SeatCode ?? '');
+          if (!seatCode) return;
+          const status = String(payload.status ?? (payload as any).Status ?? 'UNKNOWN');
+          applySeatStatus(seatCode, status);
+        });
+      } catch (err) {
+        console.warn('SeatSelection: fallo al suscribirse a NotificationHub', err);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
+      }
+      leaveEventChannel(eventNumeric).catch(() => {});
+    };
+  }, [eventoId]);
+
   const zonasMap = useMemo(() => 
     zonas.reduce((acc, zona) => {
       acc[zona.id] = zona;
@@ -94,13 +175,70 @@ export const SeatSelectionPage = () => {
     }, {} as Record<number, Zona>),
   [zonas]);
 
+  const updateHold = async (nextSeats: Asiento[]) => {
+    if (!evento) return true;
+    setUpdatingHold(true);
+    try {
+      // Release previous hold if exists
+      if (holdToken) {
+        try { await reservationsApi.releaseHold(holdToken); } catch (e) { /* ignore */ }
+      }
+      if (nextSeats.length === 0) {
+        setHoldToken(null);
+        setHoldExpires(null);
+        setHoldExpiresIso(null);
+        try {
+          sessionStorage.removeItem(`hold_token_${evento.id}`);
+          sessionStorage.removeItem(`hold_expires_${evento.id}`);
+        } catch {}
+        return true;
+      }
+      const payload = {
+        eventoId: evento.id,
+        seats: nextSeats.map(s => ({ asientoId: s.id, precio: zonas.find(z => z.id === s.zonaId)?.precio || 0 })),
+        durationMinutes: 10
+      };
+      const holdRes: any = await reservationsApi.createHold(payload);
+      const expiresAtIso = new Date(holdRes.expiresAt).toISOString();
+      setHoldToken(holdRes.token);
+      setHoldExpires(holdRes.expiresAt);
+      setHoldExpiresIso(expiresAtIso);
+      try {
+        sessionStorage.setItem(`hold_token_${evento.id}`, holdRes.token);
+        sessionStorage.setItem(`hold_expires_${evento.id}`, expiresAtIso);
+      } catch {}
+      return true;
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.toLowerCase().includes('conflict') || msg.toLowerCase().includes('already held')) {
+        alert('Asiento ya está en hold por otro usuario. Actualizamos el mapa.');
+        try {
+          const { seats: mappedSeats, zonas: mappedZonas } = evento.stageId ? await eventsApi.getSeats(evento.stageId) : await eventsApi.getSeats();
+          setAsientos(mappedSeats);
+          setZonas(mappedZonas);
+        } catch {}
+      } else {
+        console.error('Hold update failed', err);
+      }
+      return false;
+    } finally {
+      setUpdatingHold(false);
+    }
+  };
+
   const toggleSeatSelection = (seat: Asiento) => {
-    if (seat.estado === 'ocupado') return;
-    setSelectedSeats(prev => 
-      prev.find(s => s.id === seat.id)
-        ? prev.filter(s => s.id !== seat.id)
-        : [...prev, seat]
-    );
+    if (seat.estado === 'ocupado' || updatingHold) return;
+    setSelectedSeats(prev => {
+      const exists = prev.find(s => s.id === seat.id);
+      const next = exists ? prev.filter(s => s.id !== seat.id) : [...prev, seat];
+      // hold update; revert selection if fails
+      void updateHold(next).then(success => {
+        if (!success) {
+          setSelectedSeats(prevInner => exists ? [...prevInner, seat] : prevInner.filter(s => s.id !== seat.id));
+        }
+      });
+      return next;
+    });
   };
 
   const total = selectedSeats.reduce((acc, seat) => acc + (zonasMap[seat.zonaId]?.precio || 0), 0);
@@ -116,6 +254,7 @@ export const SeatSelectionPage = () => {
           sessionStorage.setItem(`hold_token_${evento?.id}`, holdRes.token);
           sessionStorage.setItem(`hold_expires_${evento?.id}`, new Date(holdRes.expiresAt).toISOString());
         } catch {}
+        setHoldExpiresIso(new Date(holdRes.expiresAt).toISOString());
         navigate('/checkout', { state: { selectedSeats, evento, zonasMap, holdToken: holdRes.token, holdExpires: holdRes.expiresAt } });
       } catch (err: any) {
         console.error('Failed to create hold', err);
@@ -146,7 +285,7 @@ export const SeatSelectionPage = () => {
               try { await reservationsApi.releaseHold(holdToken); } catch {};
               sessionStorage.removeItem(`hold_token_${evento.id}`);
               sessionStorage.removeItem(`hold_expires_${evento.id}`);
-              setHoldToken(null); setHoldExpires(null); setHoldRemaining(0);
+              setHoldToken(null); setHoldExpires(null); setHoldExpiresIso(null); setHoldRemaining(0);
               // refresh seat map
               const { seats: mappedSeats } = await eventsApi.getSeats(evento.stageId);
               setAsientos(mappedSeats);
@@ -200,6 +339,11 @@ export const SeatSelectionPage = () => {
       {/* Summary Sidebar */}
       <aside className="w-full lg:w-96 bg-base-200 p-6 flex flex-col shadow-lg">
         <h2 className="text-2xl font-bold mb-4">{evento.nombre}</h2>
+        {holdToken && holdRemaining > 0 && (
+          <div className="mb-4 p-3 rounded-lg bg-red-700 text-white text-center font-semibold">
+            Tiempo para completar: {Math.floor(holdRemaining/60)}:{String(holdRemaining%60).padStart(2,'0')}
+          </div>
+        )}
         <div className="flex-grow overflow-y-auto">
           <h3 className="text-lg font-semibold text-primary mb-2">Asientos Seleccionados</h3>
           {selectedSeats.length === 0 ? (
@@ -223,8 +367,8 @@ export const SeatSelectionPage = () => {
             <span>Total:</span>
             <span>${total.toFixed(2)}</span>
           </div>
-          <Button onClick={handleCheckout} disabled={selectedSeats.length === 0} className="w-full" size="lg">
-            Proceder al Pago
+        <Button onClick={handleCheckout} disabled={selectedSeats.length === 0 || updatingHold} className="w-full" size="lg">
+            {updatingHold ? 'Actualizando bloqueo...' : 'Proceder al Pago'}
           </Button>
         </div>
       </aside>
@@ -244,6 +388,7 @@ const Seat: React.FC<SeatProps> = ({ seat, zona, onSelect, isSelected }) => {
   const stateClasses = {
     disponible: 'cursor-pointer hover:opacity-80',
     ocupado: 'bg-gray-600 cursor-not-allowed opacity-50',
+    hold: 'bg-amber-600 cursor-not-allowed opacity-80',
     seleccionado: 'ring-4 ring-white shadow-lg'
   };
 
@@ -254,7 +399,7 @@ const Seat: React.FC<SeatProps> = ({ seat, zona, onSelect, isSelected }) => {
       onClick={() => onSelect(seat)}
       disabled={seat.estado === 'ocupado'}
       className={`w-10 h-10 rounded text-xs font-bold text-white flex items-center justify-center transition-all ${stateClasses[currentStatus]}`}
-      style={{ backgroundColor: seat.estado !== 'ocupado' ? zona.color : undefined }}
+      style={{ backgroundColor: seat.estado !== 'ocupado' && seat.estado !== 'hold' ? zona.color : undefined }}
       title={`${seat.fila} - ${seat.numero}\n${zona.nombre} - $${zona.precio.toFixed(2)}`}
     >
       {seat.numero}

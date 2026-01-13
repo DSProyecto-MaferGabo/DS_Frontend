@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import eventsApi from '../../services/eventsApi';
+import mediaApi, { MediaFileType } from '../../services/mediaApi';
 // FIX: Import Escenario type
-import type { Evento, Zona, Asiento, Escenario } from '../../types';
+import type { Evento, Zona, Asiento, Escenario, EventFormat } from '../../types';
 import { Button } from '../../components/ui/Button';
 
 const steps = ["Información del Evento", "Configurar Zonas", "Diseñar Asientos"];
+const DEFAULT_POSTER_URL = 'https://picsum.photos/seed/newevent/800/1200';
 
 export const EventCreationPage = () => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -16,8 +18,14 @@ export const EventCreationPage = () => {
     descripcion: '',
     fecha: '',
     ubicacion: '',
-    posterUrl: 'https://picsum.photos/seed/newevent/800/1200'
+    posterUrl: DEFAULT_POSTER_URL,
+    eventFormat: 'presencial',
+    streamingUrl: ''
   });
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string>(DEFAULT_POSTER_URL);
+  const [programFile, setProgramFile] = useState<File | null>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [categories, setCategories] = useState<{ id:number; name:string }[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [stages, setStages] = useState<any[]>([]);
@@ -54,6 +62,84 @@ export const EventCreationPage = () => {
     }
   }, [zones]);
 
+  useEffect(() => {
+    return () => {
+      if (posterPreview && posterPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(posterPreview);
+      }
+    };
+  }, [posterPreview]);
+
+  const handlePosterSelected = (file: File | null) => {
+    setPosterFile(file);
+    if (file) {
+      setPosterPreview(prev => {
+        if (prev && prev.startsWith('blob:')) {
+          URL.revokeObjectURL(prev);
+        }
+        return URL.createObjectURL(file);
+      });
+    } else {
+      setPosterPreview(eventInfo.posterUrl ?? DEFAULT_POSTER_URL);
+    }
+  };
+
+  const handleProgramSelected = (file: File | null) => {
+    setProgramFile(file);
+  };
+
+  const handleReceiptSelected = (file: File | null) => {
+    setReceiptFile(file);
+  };
+
+  const uploadPosterIfNeeded = async (eventId: number) => {
+    if (!posterFile) return;
+    try {
+      const upload = await mediaApi.uploadEventPoster({ eventId, file: posterFile });
+      const fileId = upload.id ?? upload.Id ?? null;
+      let storageObjectKey = (upload as any)?.storageObjectKey ?? (upload as any)?.StorageObjectKey ?? null;
+      let finalPosterUrl = upload.publicUrl ?? upload.url ?? null;
+      if (!storageObjectKey && fileId) {
+        try {
+          const metadata = await mediaApi.getFileMetadata(fileId);
+          storageObjectKey = metadata?.storageObjectKey ?? metadata?.StorageObjectKey ?? null;
+          finalPosterUrl = finalPosterUrl ?? metadata?.publicUrl ?? null;
+        } catch (metaErr) {
+          console.warn('No se pudo obtener metadata del poster', metaErr);
+        }
+      }
+
+      if (!finalPosterUrl) {
+        finalPosterUrl = eventInfo.posterUrl ?? DEFAULT_POSTER_URL;
+      }
+      await eventsApi.updatePoster(eventId, {
+        posterUrl: finalPosterUrl,
+        posterStorageObjectKey: storageObjectKey ?? undefined,
+      });
+      setPosterFile(null);
+      setPosterPreview(finalPosterUrl);
+    } catch (error) {
+      console.error('No se pudo subir el poster del evento', error);
+      alert('El evento se creó, pero no pudimos subir el poster. Inténtalo desde la pantalla de edición.');
+    }
+  };
+
+  const uploadSupplementalFile = async (eventId: number, file: File | null, fileType: MediaFileType, friendlyName: string) => {
+    if (!file) return;
+    try {
+      await mediaApi.uploadEventFile({ eventId, file, fileType });
+      if (fileType === 'program') {
+        setProgramFile(null);
+      }
+      if (fileType === 'payment-receipt') {
+        setReceiptFile(null);
+      }
+    } catch (error) {
+      console.error(`No se pudo subir el ${friendlyName}`, error);
+      alert(`El evento se creó, pero no pudimos subir el ${friendlyName}. Inténtalo nuevamente desde la pantalla de edición.`);
+    }
+  };
+
   const handleSaveEvent = async () => {
     setSaving(true);
     try {
@@ -77,6 +163,14 @@ export const EventCreationPage = () => {
       const rawDate = (eventInfo.fecha as string) || new Date().toISOString();
       const dateOnly = rawDate.length >= 10 ? rawDate.slice(0, 10) : new Date(rawDate).toISOString().slice(0, 10);
 
+      const eventFormat = ((eventInfo as any).eventFormat as EventFormat) ?? 'presencial';
+      const streamingUrl = ((eventInfo as any).streamingUrl ?? '').toString().trim();
+      if ((eventFormat === 'streaming' || eventFormat === 'hibrido') && streamingUrl.length === 0) {
+        alert('Proporciona el enlace del streaming para eventos streaming o híbridos.');
+        setSaving(false);
+        return;
+      }
+
       // Determine escenario/StageId robustly (backend may return Id or id)
   const escenarioId = (newEscenario as any)?.id ?? (newEscenario as any)?.Id ?? (newEscenario as any)?.stageId ?? null;
       if (!escenarioId) throw new Error('No se pudo obtener el Id del escenario creado');
@@ -88,8 +182,17 @@ export const EventCreationPage = () => {
         date: dateOnly,
         time: (eventInfo as any).hora ?? null,
         stageId: escenarioId,
-        categoryId: (eventInfo as any).categoryId ?? null
+        categoryId: (eventInfo as any).categoryId ?? null,
+        eventFormat,
+        streamingUrl: streamingUrl || undefined
       });
+
+      const createdEventId = Number((newEventResp as any)?.id ?? (newEventResp as any)?.Id ?? 0);
+      if (createdEventId > 0) {
+        await uploadPosterIfNeeded(createdEventId);
+        await uploadSupplementalFile(createdEventId, programFile, 'program', 'programa (PDF)');
+        await uploadSupplementalFile(createdEventId, receiptFile, 'payment-receipt', 'comprobante de pago');
+      }
 
       // 3. Save Seats -> map to backend AddSeatDto { row_number, seatnumber, zone, StageId }
         // create stage seats from zones (auto-generate matrix for each zone)
@@ -166,6 +269,56 @@ export const EventCreationPage = () => {
       <div className="bg-base-200 p-8 rounded-lg shadow-lg min-h-[500px]">
         {renderStep()}
       </div>
+      <div className="grid gap-4 md:grid-cols-2 items-start">
+        <div>
+          <label className="block mb-1">Poster del evento</label>
+          <div className="flex flex-col md:flex-row gap-4 items-start">
+            <img src={posterPreview} alt="Vista previa del poster" className="w-full md:w-48 rounded-lg object-cover border border-base-300" />
+            <div className="space-y-2 w-full">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={e => handlePosterSelected((e.target.files && e.target.files[0]) ? e.target.files[0] : null)}
+                className="w-full text-sm text-gray-200 file:bg-primary file:text-white file:border-0 file:px-4 file:py-2 file:rounded file:mr-3 file:cursor-pointer"
+              />
+              <p className="text-xs text-gray-400">Recomendado 1200x800px. Formatos: JPG, PNG o WebP (máx. 10MB).</p>
+              <button type="button" className="text-xs text-primary underline" onClick={() => handlePosterSelected(null)}>Restablecer poster</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 mt-6">
+        <div className="bg-base-200 rounded-lg p-4 border border-base-300">
+          <h3 className="text-lg font-semibold mb-2">Programa en PDF</h3>
+          <p className="text-sm text-gray-400 mb-3">Comparte el programa oficial del evento (únicamente PDF).</p>
+          <input
+            type="file"
+            accept="application/pdf"
+            onChange={e => handleProgramSelected((e.target.files && e.target.files[0]) ? e.target.files[0] : null)}
+            className="w-full text-sm text-gray-200 file:bg-primary file:text-white file:border-0 file:px-4 file:py-2 file:rounded file:mr-3 file:cursor-pointer"
+          />
+          <p className="text-xs text-gray-400 mt-2">{programFile ? programFile.name : 'Ningún archivo seleccionado.'}</p>
+          {programFile && (
+            <button type="button" className="text-xs text-primary underline mt-1" onClick={() => handleProgramSelected(null)}>Quitar archivo</button>
+          )}
+        </div>
+
+        <div className="bg-base-200 rounded-lg p-4 border border-base-300">
+          <h3 className="text-lg font-semibold mb-2">Comprobante de pago</h3>
+          <p className="text-sm text-gray-400 mb-3">Carga plantillas o formatos para validar pagos (PDF o imagen).</p>
+          <input
+            type="file"
+            accept="application/pdf,image/png,image/jpeg"
+            onChange={e => handleReceiptSelected((e.target.files && e.target.files[0]) ? e.target.files[0] : null)}
+            className="w-full text-sm text-gray-200 file:bg-primary file:text-white file:border-0 file:px-4 file:py-2 file:rounded file:mr-3 file:cursor-pointer"
+          />
+          <p className="text-xs text-gray-400 mt-2">{receiptFile ? receiptFile.name : 'Ningún archivo seleccionado.'}</p>
+          {receiptFile && (
+            <button type="button" className="text-xs text-primary underline mt-1" onClick={() => handleReceiptSelected(null)}>Quitar archivo</button>
+          )}
+        </div>
+      </div>
 
       <div className="flex justify-between mt-8">
         <Button onClick={handleBack} disabled={currentStep === 1} variant="ghost">Atrás</Button>
@@ -183,12 +336,42 @@ const EventInfoStep = ({ data, setData, categories, categoriesLoading, stages, s
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setData(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
+  const currentFormat = (data as any).eventFormat ?? 'presencial';
   return (
     <form className="space-y-4">
       <input type="text" name="nombre" value={data.nombre} onChange={handleChange} placeholder="Nombre del Evento" className="w-full p-3 bg-base-300 rounded"/>
       <div className="flex gap-2">
         <input type="date" name="fecha" value={data.fecha ?? ''} onChange={handleChange} className="w-full p-3 bg-base-300 rounded"/>
         <input type="time" name="hora" value={(data as any).hora ?? ''} onChange={handleChange} className="w-40 p-3 bg-base-300 rounded" />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <label className="text-sm">
+          <span className="block mb-1 text-gray-400">Formato del evento</span>
+          <select
+            className="w-full p-2 bg-base-300 rounded"
+            value={currentFormat}
+            onChange={(e) => setData(prev => ({ ...prev, eventFormat: e.target.value as EventFormat }))}
+          >
+            <option value="presencial">Presencial</option>
+            <option value="streaming">Streaming</option>
+            <option value="hibrido">Híbrido</option>
+          </select>
+        </label>
+        {currentFormat !== 'presencial' && (
+          <label className="text-sm">
+            <span className="block mb-1 text-gray-400">Enlace del streaming</span>
+            <input
+              type="url"
+              name="streamingUrl"
+              value={(data as any).streamingUrl ?? ''}
+              onChange={handleChange}
+              placeholder="https://youtube.com/live/..."
+              className="w-full p-2 bg-base-300 rounded"
+              required
+            />
+            <span className="text-xs text-gray-500">Usaremos este enlace para incrustar la transmisión.</span>
+          </label>
+        )}
       </div>
       <div>
         <label className="block mb-1">Escenario</label>

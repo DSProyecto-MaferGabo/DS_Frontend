@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import eventsApi from '../../services/eventsApi';
 import reservationsApi from '../../services/reservationsApi';
+import mediaApi, { MediaFileRecord, MediaFileType } from '../../services/mediaApi';
 import { Button } from '../../components/ui/Button';
-import type { Evento } from '../../types';
+import type { Evento, EventFormat } from '../../types';
+
+const DEFAULT_POSTER_URL = 'https://picsum.photos/seed/event-edit/900/600';
 
 export const EventEditPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -16,6 +19,14 @@ export const EventEditPage = () => {
   const [stageId, setStageId] = useState<number | null>(null);
   const [stageInfo, setStageInfo] = useState<any | null>(null);
   const [hoveredSeatId, setHoveredSeatId] = useState<string | number | null>(null);
+  const [posterFile, setPosterFile] = useState<File | null>(null);
+  const [posterPreview, setPosterPreview] = useState<string>(DEFAULT_POSTER_URL);
+  const posterObjectUrlRef = useRef<string | null>(null);
+  const [programFile, setProgramFile] = useState<File | null>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [programAsset, setProgramAsset] = useState<MediaFileRecord | null>(null);
+  const [receiptAsset, setReceiptAsset] = useState<MediaFileRecord | null>(null);
+  const [mediaLoading, setMediaLoading] = useState(false);
 
   // Pending/local-only changes (not saved until "Guardar Cambios")
   const [pendingAddedSeats, setPendingAddedSeats] = useState<any[]>([]);
@@ -29,6 +40,7 @@ export const EventEditPage = () => {
       try {
         const data = await eventsApi.getEvent(Number(id));
         setEvento(data);
+        setPosterPreview((data as any)?.posterUrl && String((data as any).posterUrl).trim().length > 0 ? (data as any).posterUrl : DEFAULT_POSTER_URL);
         const sId = (data as any).stageId ?? null;
         setStageId(sId);
 
@@ -95,6 +107,51 @@ export const EventEditPage = () => {
     fetch();
   }, [id]);
 
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setMediaLoading(true);
+        const [programFiles, receiptFiles] = await Promise.all([
+          mediaApi.getEventFiles(Number(id), 'program'),
+          mediaApi.getEventFiles(Number(id), 'payment-receipt'),
+        ]);
+        if (!cancelled) {
+          setProgramAsset((programFiles || [])[0] ?? null);
+          setReceiptAsset((receiptFiles || [])[0] ?? null);
+        }
+      } catch (err) {
+        console.warn('No se pudieron cargar los archivos del evento', err);
+      } finally {
+        if (!cancelled) {
+          setMediaLoading(false);
+        }
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (posterObjectUrlRef.current) {
+        URL.revokeObjectURL(posterObjectUrlRef.current);
+        posterObjectUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (posterPreview && posterPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(posterPreview);
+      }
+    };
+  }, [posterPreview]);
+
   // helper: compute if event is past (date + optional time)
   const eventDateTime = (evt?: any) => {
     if (!evt || !evt.fecha) return new Date(0);
@@ -119,6 +176,10 @@ export const EventEditPage = () => {
     const { name, value } = e.target;
     setEvento(prev => ({ ...(prev || {}), [name]: value }));
   };
+
+
+
+
 
   // Add seat locally (do not call API yet)
   const addSeatLocally = (zone: any) => {
@@ -159,9 +220,120 @@ export const EventEditPage = () => {
     setSeats(prev => prev.filter(s => s.rawId !== seat.rawId));
   };
 
+  const resolvePosterFromEvent = () => {
+    const raw = (evento as any)?.posterUrl ?? (evento as any)?.posterURL ?? null;
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (trimmed.length > 0) return trimmed;
+    }
+    return DEFAULT_POSTER_URL;
+  };
+
+  const handlePosterSelected = (file: File | null) => {
+    if (posterObjectUrlRef.current) {
+      URL.revokeObjectURL(posterObjectUrlRef.current);
+      posterObjectUrlRef.current = null;
+    }
+    setPosterFile(file);
+    if (file) {
+      const blobUrl = URL.createObjectURL(file);
+      posterObjectUrlRef.current = blobUrl;
+      setPosterPreview(blobUrl);
+    } else {
+      setPosterPreview(resolvePosterFromEvent());
+    }
+  };
+
+  const uploadPosterIfNeeded = async (eventId: number) => {
+    if (!posterFile) return;
+    try {
+      const upload = await mediaApi.uploadEventPoster({ eventId, file: posterFile });
+      const fileId = upload.id ?? upload.Id ?? null;
+      let storageObjectKey = (upload as any)?.storageObjectKey ?? (upload as any)?.StorageObjectKey ?? null;
+      let publicUrl = upload.publicUrl ?? upload.url ?? null;
+
+      if ((fileId && (!storageObjectKey || !publicUrl))) {
+        try {
+          const metadata = await mediaApi.getFileMetadata(fileId);
+          storageObjectKey = storageObjectKey ?? metadata?.storageObjectKey ?? metadata?.StorageObjectKey ?? null;
+          if (!publicUrl && metadata?.publicUrl) {
+            publicUrl = metadata.publicUrl;
+          }
+        } catch (metaErr) {
+          console.warn('No se pudo obtener metadata del archivo subido', metaErr);
+        }
+      }
+
+      const finalPosterUrl = publicUrl ?? resolvePosterFromEvent();
+      await eventsApi.updatePoster(eventId, {
+        posterUrl: finalPosterUrl,
+        posterStorageObjectKey: storageObjectKey ?? undefined,
+      });
+      if (posterObjectUrlRef.current) {
+        URL.revokeObjectURL(posterObjectUrlRef.current);
+        posterObjectUrlRef.current = null;
+      }
+      setPosterFile(null);
+      setPosterPreview(finalPosterUrl);
+      setEvento(prev => prev ? ({ ...prev, posterUrl: finalPosterUrl }) : prev);
+    } catch (error) {
+      console.error('No se pudo actualizar el poster del evento', error);
+      alert('El evento se guardó, pero no pudimos actualizar el poster. Inténtalo nuevamente.');
+    }
+  };
+
+  const handleProgramSelected = (file: File | null) => {
+    setProgramFile(file);
+  };
+
+  const handleReceiptSelected = (file: File | null) => {
+    setReceiptFile(file);
+  };
+
+  const resolveAssetUrl = (asset: MediaFileRecord | null) => {
+    if (!asset) return null;
+    return asset.publicUrl ?? (asset as any)?.url ?? null;
+  };
+
+  const resolveAssetName = (asset: MediaFileRecord | null, fallback: string) => {
+    return asset?.originalFileName ?? (asset as any)?.OriginalFileName ?? fallback;
+  };
+
+  const uploadSupplementalFile = async (eventId: number, file: File | null, fileType: MediaFileType) => {
+    if (!file) return;
+    try {
+      const upload = await mediaApi.uploadEventFile({ eventId, file, fileType });
+      const normalized: MediaFileRecord = {
+        ...upload,
+        publicUrl: upload.publicUrl ?? (upload as any)?.url ?? null,
+        originalFileName: upload.originalFileName ?? (upload as any)?.OriginalFileName ?? file.name,
+        fileType: upload.fileType ?? (upload as any)?.FileType ?? fileType,
+      };
+      if (fileType === 'program') {
+        setProgramAsset(normalized);
+        setProgramFile(null);
+      } else if (fileType === 'payment-receipt') {
+        setReceiptAsset(normalized);
+        setReceiptFile(null);
+      }
+    } catch (error) {
+      console.error('No se pudo subir archivo adicional', error);
+      alert(fileType === 'program' ? 'No pudimos subir el programa (PDF). Inténtalo de nuevo.' : 'No pudimos subir el comprobante de pago. Inténtalo de nuevo.');
+    }
+  };
+
+  const programUrl = resolveAssetUrl(programAsset);
+  const receiptUrl = resolveAssetUrl(receiptAsset);
+
   const handleSave = async () => {
     if (!id || !evento) return;
     try {
+      const eventFormat = ((evento as any).eventFormat ?? 'presencial') as EventFormat;
+      const streamingUrl = ((evento as any).streamingUrl ?? '').toString().trim();
+      if ((eventFormat === 'streaming' || eventFormat === 'hibrido') && streamingUrl.length === 0) {
+        alert('Debes indicar el enlace del streaming para eventos streaming o híbridos.');
+        return;
+      }
       // update core event fields
       await eventsApi.updateEvent(Number(id), {
         name: evento.nombre || 'Evento',
@@ -169,6 +341,8 @@ export const EventEditPage = () => {
         date: (evento.fecha || new Date().toISOString().slice(0,10)),
         stageId: stageId ?? 1,
         categoryId: (evento as any).categoryId ?? null,
+        eventFormat,
+        streamingUrl: streamingUrl || undefined,
       });
 
       // Apply zona name changes (existing behaviour) - only update seats for existing seats
@@ -213,10 +387,20 @@ export const EventEditPage = () => {
         }
       }
 
+      if (posterFile && id) {
+        await uploadPosterIfNeeded(Number(id));
+      }
+
+      if (id) {
+        await uploadSupplementalFile(Number(id), programFile, 'program');
+        await uploadSupplementalFile(Number(id), receiptFile, 'payment-receipt');
+      }
+
       alert('Cambios guardados correctamente');
       // refresh everything
       const refreshed = await eventsApi.getEvent(Number(id));
       setEvento(refreshed);
+      setPosterPreview((refreshed as any)?.posterUrl && String((refreshed as any).posterUrl).trim().length > 0 ? (refreshed as any).posterUrl : DEFAULT_POSTER_URL);
       if (stageId) {
         const r = await eventsApi.getSeats(stageId);
         setSeats(r.seats || []);
@@ -279,6 +463,23 @@ export const EventEditPage = () => {
             <div className="text-sm text-gray-400">Ubicación: {stageInfo.location} · Aforo: {stageInfo.peoplecapacity ?? stageInfo.peopleCapacity}</div>
           </div>
         )}
+        <div className="mb-6">
+          <label className="block mb-2 font-semibold">Poster del evento</label>
+          <div className="flex flex-col md:flex-row gap-4 items-start">
+            <img src={posterPreview} alt="Poster actual" className="w-full md:w-60 rounded-lg object-cover border border-base-300" />
+            <div className="space-y-2 w-full">
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={isPastEvent}
+                onChange={e => handlePosterSelected((e.target.files && e.target.files[0]) ? e.target.files[0] : null)}
+                className="w-full text-sm text-gray-200 file:bg-primary file:text-white file:border-0 file:px-4 file:py-2 file:rounded file:mr-3 file:cursor-pointer disabled:opacity-50"
+              />
+              <p className="text-xs text-gray-400">Sube una imagen 1200x800px (JPG, PNG o WebP). Solo se aplicará al guardar.</p>
+              <button type="button" className="text-xs text-primary underline disabled:text-gray-500" disabled={isPastEvent} onClick={() => handlePosterSelected(null)}>Restablecer poster</button>
+            </div>
+          </div>
+        </div>
     <label className="block mb-2 font-semibold">Nombre</label>
       <input name="nombre" value={evento.nombre || ''} onChange={handleChange} className="w-full p-2 bg-base-300 rounded mb-4" disabled={isPastEvent} />
 
@@ -296,6 +497,34 @@ export const EventEditPage = () => {
       <option value="">-- Sin categoría --</option>
       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
     </select>
+  <div className="grid gap-4 md:grid-cols-2">
+    <label className="block">
+      <span className="block mb-2 font-semibold">Formato del evento</span>
+      <select
+        className="w-full p-2 bg-base-300 rounded mb-4"
+        value={(evento as any).eventFormat ?? 'presencial'}
+        onChange={e => setEvento(prev => ({ ...(prev || {}), eventFormat: e.target.value as EventFormat }))}
+        disabled={isPastEvent}
+      >
+        <option value="presencial">Presencial</option>
+        <option value="streaming">Streaming</option>
+        <option value="hibrido">Híbrido</option>
+      </select>
+    </label>
+    {((evento as any).eventFormat ?? 'presencial') !== 'presencial' && (
+      <label className="block md:col-span-1">
+        <span className="block mb-2 font-semibold">Enlace del streaming</span>
+        <input
+          type="url"
+          className="w-full p-2 bg-base-300 rounded mb-1"
+          value={(evento as any).streamingUrl ?? ''}
+          onChange={e => setEvento(prev => ({ ...(prev || {}), streamingUrl: e.target.value }))}
+          disabled={isPastEvent}
+        />
+        <p className="text-xs text-gray-400">Usaremos este enlace para incrustar la transmisión o mostrar un acceso directo.</p>
+      </label>
+    )}
+  </div>
 
         <div className="flex gap-2">
           <Button onClick={handleSave} variant="primary" disabled={isPastEvent}>
@@ -336,6 +565,54 @@ export const EventEditPage = () => {
                 <div className="flex justify-between items-center mb-3">
                   <div>
                       <div>
+
+                <div className="grid gap-4 md:grid-cols-2 mb-6">
+                  <div className="bg-base-300 rounded-lg p-4 border border-base-100">
+                    <h3 className="text-lg font-semibold mb-2">Programa en PDF</h3>
+                    <p className="text-sm text-gray-400">
+                      {mediaLoading ? 'Cargando archivos...' : programAsset ? `Archivo actual: ${resolveAssetName(programAsset, 'Programa.pdf')}` : 'Aún no se ha cargado un programa.'}
+                    </p>
+                    {programUrl && (
+                      <button type="button" className="text-xs text-primary underline mt-1" onClick={() => window.open(programUrl, '_blank')}>
+                        Ver archivo actual
+                      </button>
+                    )}
+                    <input
+                      type="file"
+                      accept="application/pdf"
+                      disabled={isPastEvent}
+                      onChange={e => handleProgramSelected((e.target.files && e.target.files[0]) ? e.target.files[0] : null)}
+                      className="mt-3 w-full text-sm text-gray-200 file:bg-primary file:text-white file:border-0 file:px-4 file:py-2 file:rounded file:mr-3 file:cursor-pointer disabled:opacity-50"
+                    />
+                    <p className="text-xs text-gray-400 mt-2">{programFile ? `Seleccionado: ${programFile.name}` : 'Ningún archivo seleccionado.'}</p>
+                    {programFile && (
+                      <button type="button" className="text-xs text-primary underline mt-1" onClick={() => handleProgramSelected(null)}>Quitar archivo</button>
+                    )}
+                  </div>
+
+                  <div className="bg-base-300 rounded-lg p-4 border border-base-100">
+                    <h3 className="text-lg font-semibold mb-2">Comprobante de pago</h3>
+                    <p className="text-sm text-gray-400">
+                      {mediaLoading ? 'Cargando archivos...' : receiptAsset ? `Archivo actual: ${resolveAssetName(receiptAsset, 'Comprobante.pdf')}` : 'Aún no se ha cargado un comprobante.'}
+                    </p>
+                    {receiptUrl && (
+                      <button type="button" className="text-xs text-primary underline mt-1" onClick={() => window.open(receiptUrl, '_blank')}>
+                        Ver archivo actual
+                      </button>
+                    )}
+                    <input
+                      type="file"
+                      accept="application/pdf,image/png,image/jpeg"
+                      disabled={isPastEvent}
+                      onChange={e => handleReceiptSelected((e.target.files && e.target.files[0]) ? e.target.files[0] : null)}
+                      className="mt-3 w-full text-sm text-gray-200 file:bg-primary file:text-white file:border-0 file:px-4 file:py-2 file:rounded file:mr-3 file:cursor-pointer disabled:opacity-50"
+                    />
+                    <p className="text-xs text-gray-400 mt-2">{receiptFile ? `Seleccionado: ${receiptFile.name}` : 'Ningún archivo seleccionado.'}</p>
+                    {receiptFile && (
+                      <button type="button" className="text-xs text-primary underline mt-1" onClick={() => handleReceiptSelected(null)}>Quitar archivo</button>
+                    )}
+                  </div>
+                </div>
                         <label className="block mb-2 font-semibold">Nombre de zona</label>
                         <input className="font-semibold p-1 bg-base-100 rounded mb-1" value={z.nombre} onChange={e => setZonas(prev => prev.map(x => x.id === z.id ? { ...x, nombre: e.target.value } : x))} />
                       </div>

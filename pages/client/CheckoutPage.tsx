@@ -16,12 +16,29 @@ export const CheckoutPage = () => {
     evento,
     zonasMap,
     holdToken,
+    holdExpires,
   }: {
     selectedSeats: Asiento[];
     evento: Evento;
     zonasMap: Record<number, Zona>;
     holdToken?: string | null;
+    holdExpires?: string | null;
   } = location.state || { selectedSeats: [], evento: null, zonasMap: {} };
+
+  const [holdRemaining, setHoldRemaining] = React.useState<number>(0);
+
+  // keep the countdown visible across checkout lifecycle
+  React.useEffect(() => {
+    const storedExpires = holdExpires || (evento?.id ? sessionStorage.getItem(`hold_expires_${evento.id}`) : null);
+    if (!storedExpires) return;
+    const update = () => {
+      const remaining = Math.max(0, Math.floor((new Date(storedExpires).getTime() - Date.now()) / 1000));
+      setHoldRemaining(remaining);
+    };
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [holdExpires, evento?.id]);
 
   if (!evento || selectedSeats.length === 0) {
     return (
@@ -47,7 +64,28 @@ export const CheckoutPage = () => {
   const handleConfirmReservation = async () => {
     if (!profile) return;
     // Navigate to mock payment gateway (non-functional) where user will confirm payment
-    navigate('/payment', { state: { selectedSeats, evento, zonasMap, selectedServiceIds, subtotal, servicesTotal, total, holdToken } });
+    const selectedServices = availableServices
+      .filter(s => selectedServiceIds.includes(s.Id))
+      .map(s => ({
+        id: s.Id,
+        name: s.Name,
+        description: s.Description,
+        price: s.Price
+      }));
+
+    navigate('/payment', {
+      state: {
+        selectedSeats,
+        evento,
+        zonasMap,
+        selectedServiceIds,
+        selectedServices,
+        subtotal,
+        servicesTotal,
+        total,
+        holdToken
+      }
+    });
   };
 
   React.useEffect(() => {
@@ -70,10 +108,10 @@ export const CheckoutPage = () => {
   return (
     <div className="max-w-4xl mx-auto p-4">
       {/* Hold banner */}
-      {holdToken && (
-        <div className="mb-4">
+      {holdToken && holdRemaining > 0 && (
+        <div className="mb-4 sticky top-4 z-30">
           <div className="bg-red-600 text-white p-3 rounded-lg shadow-md font-bold text-center">
-            Tienes asientos reservados temporalmente para este evento. Completa el pago antes de que expire.
+            Asientos retenidos. Tiempo restante: {Math.floor(holdRemaining/60)}:{String(holdRemaining%60).padStart(2,'0')} — completa el pago antes de que expire.
           </div>
         </div>
       )}
