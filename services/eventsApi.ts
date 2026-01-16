@@ -86,7 +86,8 @@ function mapEvent(dto: any) {
     ubicacion: dto.location ?? dto.ubicacion ?? '',
     posterUrl,
     posterStorageObjectKey: dto.posterStorageObjectKey ?? dto.PosterStorageObjectKey ?? null,
-    stageId: dto.stageId,
+    // Accept both camelCase and PascalCase from backend to avoid losing stageId and falling back to all seats
+    stageId: dto.stageId ?? dto.StageId,
   // Precio general para eventos sin asientos (streaming / tarifa única)
   generalPrice: dto.generalPrice ?? dto.GeneralPrice ?? dto.price ?? dto.Price ?? null,
   // keep category information if present so frontend can filter by category
@@ -134,8 +135,11 @@ export default {
     const data = await request<Json[]>('/Events');
     // Fetch stages once to enrich events with stage location when DTO doesn't provide a location
     let stages: any[] = [];
+  
+  // Updated endpoint for admin events
+  
     try {
-      stages = await request<Json[]>('/Stage');
+    const data = await request<Json[]>('/admin/events');
     } catch (e) {
       console.warn('Could not load stages to enrich events', e);
     }

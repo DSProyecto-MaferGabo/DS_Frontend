@@ -8,6 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { getServiceStatusCache } from '../../services/serviceStatusCache';
 import keycloak from '../../services/keycloakService';
+import { useI18n } from '../../i18n';
 
 type Tab = 'reservaciones' | 'asistidos' | 'pagos' | 'perfil';
 
@@ -16,6 +17,7 @@ interface PopulatedReservacion extends Reservacion {
 }
 
 export const UserProfile = () => {
+  const { t } = useI18n();
   const [activeTab, setActiveTab] = useState<Tab>('reservaciones');
   const [reservaciones, setReservaciones] = useState<PopulatedReservacion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,7 @@ export const UserProfile = () => {
   const navigate = useNavigate();
   const [nameDraft, setNameDraft] = useState(profile?.firstName || '');
   const [lastNameDraft, setLastNameDraft] = useState(profile?.lastName || '');
+  const [usernameDraft, setUsernameDraft] = useState(profile?.username || '');
   const [emailDraft, setEmailDraft] = useState(profile?.email || '');
   const [passwordDraft, setPasswordDraft] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
@@ -37,15 +40,15 @@ export const UserProfile = () => {
   const describeServiceStatus = (status?: string) => {
     const normalized = String(status || 'PENDING').toUpperCase();
     if (normalized === 'CONFIRMED') {
-      return { label: 'Confirmado', badgeClass: 'bg-green-500/20 text-green-200' };
+      return { label: t('status.confirmed') ?? 'Confirmado', badgeClass: 'bg-green-500/20 text-green-200' };
     }
     if (normalized === 'REJECTED' || normalized === 'FAILED' || normalized === 'CANCELLED') {
-      return { label: 'Rechazado', badgeClass: 'bg-red-500/20 text-red-300' };
+      return { label: t('status.rejected') ?? 'Rechazado', badgeClass: 'bg-red-500/20 text-red-300' };
     }
     if (normalized === 'IN_PROGRESS' || normalized === 'REQUESTED') {
-      return { label: 'En proceso', badgeClass: 'bg-sky-500/20 text-sky-200' };
+      return { label: t('status.inProgress') ?? 'En proceso', badgeClass: 'bg-sky-500/20 text-sky-200' };
     }
-    return { label: 'Pendiente', badgeClass: 'bg-yellow-500/20 text-yellow-200' };
+    return { label: t('status.pending') ?? 'Pendiente', badgeClass: 'bg-yellow-500/20 text-yellow-200' };
   };
   
   useEffect(() => {
@@ -154,7 +157,7 @@ export const UserProfile = () => {
   }, [profile]);
 
   const renderContent = () => {
-    if(loading) return <div className="text-center p-8">Cargando tus datos...</div>;
+    if(loading) return <div className="text-center p-8">{t('profile.loading') ?? 'Cargando tus datos...'}</div>;
     // compute precise event DateTime using `fecha` (DateOnly) and optional `hora` returned by Events API
     const eventDateTime = (evt?: any) => {
       if (!evt || !evt.fecha) return new Date(0);
@@ -181,29 +184,40 @@ export const UserProfile = () => {
         return (
           <div className="max-w-xl space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-white">Mi información</h2>
-              <p className="text-sm text-gray-400">Actualiza tu perfil y cambia tu contraseña directamente en Keycloak.</p>
+              <h2 className="text-2xl font-bold text-white">{t('profile.infoTitle') ?? 'Mi información'}</h2>
+              <p className="text-sm text-gray-400">{t('profile.infoSubtitle') ?? 'Actualiza tu perfil y contraseña.'}</p>
             </div>
             <div className="space-y-3">
               <label className="block">
-                <span className="text-sm text-gray-400">Nombre</span>
-                <input className="input input-bordered w-full bg-base-200"
+                <span className="text-sm text-gray-400">{t('profile.username') ?? 'Nombre de usuario'}</span>
+                <input
+                  className="input input-bordered w-full bg-base-200 border border-white/40"
+                  value={usernameDraft}
+                  disabled
+                  title="El nombre de usuario es de solo lectura en este entorno"
+                  placeholder="username"
+                />
+                <p className="text-xs text-gray-500 mt-1">{t('profile.usernameReadonly') ?? 'Este campo es de solo lectura.'}</p>
+              </label>
+              <label className="block">
+                <span className="text-sm text-gray-400">{t('profile.firstName') ?? 'Nombre'}</span>
+                <input className="input input-bordered w-full bg-base-200 border border-white/40 focus:border-primary focus:ring-primary"
                   value={nameDraft}
                   onChange={e => setNameDraft(e.target.value)}
-                  placeholder="Nombre"
+                  placeholder={t('profile.firstName') ?? 'Nombre'}
                 />
               </label>
               <label className="block">
-                <span className="text-sm text-gray-400">Apellidos</span>
-                <input className="input input-bordered w-full bg-base-200"
+                <span className="text-sm text-gray-400">{t('profile.lastName') ?? 'Apellidos'}</span>
+                <input className="input input-bordered w-full bg-base-200 border border-white/40 focus:border-primary focus:ring-primary"
                   value={lastNameDraft}
                   onChange={e => setLastNameDraft(e.target.value)}
-                  placeholder="Apellidos"
+                  placeholder={t('profile.lastName') ?? 'Apellidos'}
                 />
               </label>
               <label className="block">
-                <span className="text-sm text-gray-400">Correo</span>
-                <input className="input input-bordered w-full bg-base-200"
+                <span className="text-sm text-gray-400">{t('profile.email') ?? 'Correo'}</span>
+                <input className="input input-bordered w-full bg-base-200 border border-white/40 focus:border-primary focus:ring-primary"
                   type="email"
                   value={emailDraft}
                   onChange={e => setEmailDraft(e.target.value)}
@@ -221,8 +235,8 @@ export const UserProfile = () => {
                     const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'ds-repo1';
                     const token = await keycloak.ensureTokenValid(30).then(() => keycloak.getToken()).catch(() => null);
                     if (!token) throw new Error('No se pudo obtener token');
-                    await fetch(`${baseUrl}/realms/${realm}/account`, {
-                      method: 'PUT',
+                    const resp = await fetch(`${baseUrl}/realms/${realm}/account`, {
+                      method: 'POST', // Keycloak account REST API expects POST for profile updates
                       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                       body: JSON.stringify({
                         firstName: nameDraft,
@@ -231,78 +245,40 @@ export const UserProfile = () => {
                         attributes: profile?.attributes ?? {}
                       })
                     });
-                    alert('Perfil actualizado.');
+                    if (!resp.ok) {
+                      const txt = await resp.text().catch(() => '');
+                      throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${txt}`);
+                    }
+                    alert(t('profile.updated') ?? 'Perfil actualizado.');
                   } catch (err) {
                     console.error('No se pudo actualizar perfil', err);
-                    alert('No se pudo actualizar perfil. Revisa conexión o permisos.');
+                    alert(t('profile.updateError') ?? 'No se pudo actualizar perfil. Revisa conexión o permisos.');
                   } finally {
                     setSavingProfile(false);
                   }
                 }}
               >
-                {savingProfile ? 'Guardando...' : 'Guardar cambios'}
+                {savingProfile ? (t('profile.saving') ?? 'Guardando...') : (t('profile.save') ?? 'Guardar cambios')}
               </Button>
             </div>
 
             <div className="space-y-3 pt-2 border-t border-base-300">
-              <h3 className="text-lg font-semibold text-white">Cambiar contraseña</h3>
-              <label className="block">
-                <span className="text-sm text-gray-400">Contraseña actual</span>
-                <input className="input input-bordered w-full bg-base-200"
-                  type="password"
-                  value={passwordCurrent}
-                  onChange={e => setPasswordCurrent(e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-gray-400">Nueva contraseña</span>
-                <input className="input input-bordered w-full bg-base-200"
-                  type="password"
-                  value={passwordNew}
-                  onChange={e => setPasswordNew(e.target.value)}
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm text-gray-400">Confirmar nueva contraseña</span>
-                <input className="input input-bordered w-full bg-base-200"
-                  type="password"
-                  value={passwordConfirm}
-                  onChange={e => setPasswordConfirm(e.target.value)}
-                />
-              </label>
+              <h3 className="text-lg font-semibold text-white">{t('profile.passwordTitle') ?? 'Cambiar contraseña'}</h3>
+              <p className="text-sm text-gray-400">
+                {t('profile.passwordDesc') ?? 'Usa el flujo de "¿Olvidaste tu contraseña?" de Keycloak.'}
+              </p>
               <Button
                 variant="secondary"
-                disabled={savingProfile || !profile || !passwordCurrent || !passwordNew || passwordNew !== passwordConfirm}
-                onClick={async () => {
-                  if (!profile) return;
-                  setSavingProfile(true);
-                  try {
-                    const baseUrl = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080';
-                    const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'ds-repo1';
-                    const token = await keycloak.ensureTokenValid(30).then(() => keycloak.getToken()).catch(() => null);
-                    if (!token) throw new Error('No se pudo obtener token');
-                    await fetch(`${baseUrl}/realms/${realm}/account/credentials/password`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                      body: JSON.stringify({
-                        currentPassword: passwordCurrent,
-                        newPassword: passwordNew,
-                        confirmation: passwordConfirm
-                      })
-                    });
-                    alert('Contraseña actualizada. Vuelve a iniciar sesión.');
-                    setPasswordCurrent('');
-                    setPasswordNew('');
-                    setPasswordConfirm('');
-                  } catch (err) {
-                    console.error('No se pudo cambiar la contraseña', err);
-                    alert('No se pudo cambiar la contraseña. Verifica la actual y permisos.');
-                  } finally {
-                    setSavingProfile(false);
-                  }
+                onClick={() => {
+                  const baseUrl = import.meta.env.VITE_KEYCLOAK_URL || 'http://localhost:8080';
+                  const realm = import.meta.env.VITE_KEYCLOAK_REALM || 'ds-repo1';
+                  const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT || 'frontend-spa';
+                  const redirectUri = window.location.origin;
+                  const resetUrl = `${baseUrl}/realms/${realm}/login-actions/reset-credentials?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+                  window.open(resetUrl, '_blank');
                 }}
               >
-                {savingProfile ? 'Actualizando...' : 'Cambiar contraseña'}
+                {t('profile.passwordCta') ?? 'Recuperar / cambiar contraseña'}
               </Button>
             </div>
           </div>
@@ -316,11 +292,11 @@ export const UserProfile = () => {
           const paymentsForRes = payments.filter(p => String(p.reservationId ?? p.ReservationId ?? p.reservationID ?? '') === String(resId));
           const hasApproved = paymentsForRes.some(p => String(p.state ?? p.State ?? '').toLowerCase() === 'approved');
           const hasPending = paymentsForRes.some(p => String(p.state ?? p.State ?? '').toLowerCase() === 'pending' || String(p.state ?? '').toLowerCase() === 'initiated');
-          if (hasApproved) return { label: 'Confirmada', className: 'bg-green-500/20 text-green-300', isPaid: true };
-          if (hasPending) return { label: 'Pendiente de pago', className: 'bg-yellow-500/20 text-yellow-300', isPaid: false };
+          if (hasApproved) return { label: t('status.confirmed') ?? 'Confirmada', className: 'bg-green-500/20 text-green-300', isPaid: true };
+          if (hasPending) return { label: t('status.pendingPayment') ?? 'Pendiente de pago', className: 'bg-yellow-500/20 text-yellow-300', isPaid: false };
           const st = String(res.estado || res.state || '').toLowerCase();
           const isPaid = st === 'paid' || st === 'confirmada';
-          const label = isPaid ? 'Confirmada' : (res.estado || 'Pendiente');
+          const label = isPaid ? (t('status.confirmed') ?? 'Confirmada') : ((res.estado || t('status.pending') || 'Pendiente'));
           return { label, className: isPaid ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300', isPaid };
         };
 
@@ -334,22 +310,22 @@ export const UserProfile = () => {
                 <div key={res.id} className="bg-base-300 p-4 rounded-lg">
                   <div className="flex justify-between items-center">
                     <div>
-                      <h3 className="font-bold text-lg text-white">{res.evento?.nombre || 'Evento Desconocido'}</h3>
-                      <p className="text-sm text-gray-400">Fecha de compra: {new Date(res.fecha).toLocaleDateString()}</p>
-                      <p className="text-sm text-gray-400">Total: ${Number(res.total || 0).toFixed(2)}</p>
-                      <p className="text-sm text-gray-400">Entradas: {((res._seatsDetailed && res._seatsDetailed.length>0)
+                      <h3 className="font-bold text-lg text-white">{res.evento?.nombre || (t('profile.eventUnknown') ?? 'Evento Desconocido')}</h3>
+                      <p className="text-sm text-gray-400">{t('profile.purchaseDate') ?? 'Fecha de compra'}: {new Date(res.fecha).toLocaleDateString()}</p>
+                      <p className="text-sm text-gray-400">{t('profile.total') ?? 'Total'}: ${Number(res.total || 0).toFixed(2)}</p>
+                      <p className="text-sm text-gray-400">{t('profile.tickets') ?? 'Entradas'}: {((res._seatsDetailed && res._seatsDetailed.length>0)
                         ? res._seatsDetailed.map((s:any)=>s.label).join(', ')
                         : (res.seats && res.seats.length>0) ? res.seats.map((s:any)=>String(s.asientoId)).join(', ') : '—')}
                       </p>
                       {res.couponCode && (
-                        <p className="text-sm text-green-300">Cupón: <span className="font-semibold">{res.couponCode}</span> — Descuento: ${Number(res.discountAmount ?? 0).toFixed(2)}</p>
+                        <p className="text-sm text-green-300">{t('profile.coupon') ?? 'Cupón'}: <span className="font-semibold">{res.couponCode}</span> — {t('profile.discount') ?? 'Descuento'}: ${Number(res.discountAmount ?? 0).toFixed(2)}</p>
                       )}
                       {serviceStatuses && serviceStatuses.length > 0 && (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {serviceStatuses.map((service, idx) => {
                             const numericId = Number(service.serviceId ?? service.id ?? service.Id ?? 0);
                             const fallbackId = numericId > 0 ? numericId : idx + 1;
-                            const name = service.name || `Servicio #${fallbackId}`;
+                        const name = service.name || `${t('profile.serviceLabel', { id: fallbackId }) ?? `Servicio #${fallbackId}`}`;
                             const { label, badgeClass } = describeServiceStatus(service.status);
                             return (
                               <span key={`${res.id}-${fallbackId}`} className={`px-2 py-1 rounded-full text-xs font-semibold ${badgeClass}`}>
@@ -363,7 +339,7 @@ export const UserProfile = () => {
                     <div className="flex items-center gap-4">
                       <span className={`px-3 py-1 text-sm font-semibold rounded-full ${derived.className}`}>
                         {derived.label}
-                      </span>
+                          </span>
 
                       <div className="flex items-center gap-2">
                         {canPay && (
@@ -382,7 +358,7 @@ export const UserProfile = () => {
                               }
                             })}
                           >
-                            Pagar ahora
+                            {t('profile.payNow') ?? 'Pagar ahora'}
                           </Button>
                         )}
                         <Button size="sm" variant="ghost" onClick={() => toggleExpanded(res.id)}>
@@ -390,7 +366,7 @@ export const UserProfile = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
-                          <span className="text-sm">{expandedIds[String(res.id)] ? 'Ocultar' : 'Detalles'}</span>
+                          <span className="text-sm">{expandedIds[String(res.id)] ? (t('profile.hide') ?? 'Ocultar') : (t('profile.details') ?? 'Detalles')}</span>
                         </Button>
 
                         <Link to={`/evento/${res.eventoId}`}>
@@ -398,7 +374,7 @@ export const UserProfile = () => {
                             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 inline-block mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                             </svg>
-                            <span className="text-sm">Ver Evento</span>
+                            <span className="text-sm">{t('profile.viewEvent') ?? 'Ver Evento'}</span>
                           </Button>
                         </Link>
                       </div>
@@ -407,24 +383,24 @@ export const UserProfile = () => {
 
                   {expandedIds[String(res.id)] && (
                     <div className="mt-4 border-t pt-4 text-sm text-gray-300">
-                      <h4 className="font-semibold">Información del evento</h4>
+                      <h4 className="font-semibold">{t('profile.eventInfo') ?? 'Información del evento'}</h4>
                       <p>{res.evento?.nombre}</p>
                       <p className="text-gray-400">{res.evento?.descripcion}</p>
 
                       <div className="mt-3">
-                        <h4 className="font-semibold">Servicios</h4>
+                        <h4 className="font-semibold">{t('profile.services') ?? 'Servicios'}</h4>
                         {serviceStatuses && serviceStatuses.length > 0 ? (
                           <div className="space-y-3 mt-2">
                             {serviceStatuses.map((service, idx) => {
                               const numericId = Number(service.serviceId ?? service.id ?? service.Id ?? 0);
                               const fallbackId = numericId > 0 ? numericId : idx + 1;
                               const { label, badgeClass } = describeServiceStatus(service.status);
-                              const name = service.name || `Servicio #${fallbackId}`;
+                            const name = service.name || `${t('profile.serviceLabel', { id: fallbackId }) ?? `Servicio #${fallbackId}`}`;
                               return (
                                 <div key={`${res.id}-detail-${fallbackId}`} className="flex items-center justify-between border border-base-300 rounded-lg px-3 py-2">
                                   <div>
                                     <p className="font-semibold text-white">{name}</p>
-                                    <p className="text-xs text-gray-400">Servicio #{fallbackId} — ${Number(service.price ?? 0).toFixed(2)}</p>
+                                    <p className="text-xs text-gray-400">{t('profile.serviceNumber', { id: fallbackId }) ?? `Servicio #${fallbackId}`} — ${Number(service.price ?? 0).toFixed(2)}</p>
                                   </div>
                                   <div className="text-right">
                                     <span className={`px-2 py-1 rounded-full text-xs font-semibold ${badgeClass}`}>{label}</span>
@@ -440,11 +416,11 @@ export const UserProfile = () => {
                           <ul className="list-disc pl-5">
                             {res.services.map((s: any) => <li key={s.id}>{s.name} — ${Number(s.price).toFixed(2)}</li>)}
                           </ul>
-                        ) : <p className="text-gray-400">No se solicitaron servicios adicionales.</p>}
+                        ) : <p className="text-gray-400">{t('profile.noServices') ?? 'No se solicitaron servicios adicionales.'}</p>}
                       </div>
 
                       <div className="mt-3">
-                        <h4 className="font-semibold">Asientos</h4>
+                        <h4 className="font-semibold">{t('profile.seats') ?? 'Asientos'}</h4>
                         {res._seatsDetailed && res._seatsDetailed.length > 0 ? (
                           <ul className="list-disc pl-5">
                             {res._seatsDetailed.map((s: any, idx: number) => (
@@ -456,14 +432,14 @@ export const UserProfile = () => {
                           <ul className="list-disc pl-5">
                             {res.seats.map((s: any, idx: number) => <li key={idx}>{s.asientoId} — ${Number(s.precio).toFixed(2)}</li>)}
                           </ul>
-                        ) : <p className="text-gray-400">No hay asientos registrados para esta reservación.</p>}
+                        ) : <p className="text-gray-400">{t('profile.noSeats') ?? 'No hay asientos registrados para esta reservación.'}</p>}
                       </div>
 
                       {res.couponCode && (
                         <div className="mt-4">
-                          <h4 className="font-semibold">Cupón aplicado</h4>
-                          <p className="text-sm">Código: <span className="font-medium">{res.couponCode}</span></p>
-                          <p className="text-sm">Descuento: <span className="font-medium">${Number(res.discountAmount ?? 0).toFixed(2)}</span></p>
+                          <h4 className="font-semibold">{t('profile.couponApplied') ?? 'Cupón aplicado'}</h4>
+                          <p className="text-sm">{t('profile.couponCode') ?? 'Código'}: <span className="font-medium">{res.couponCode}</span></p>
+                          <p className="text-sm">{t('profile.discount') ?? 'Descuento'}: <span className="font-medium">${Number(res.discountAmount ?? 0).toFixed(2)}</span></p>
                         </div>
                       )}
                     </div>
@@ -472,29 +448,29 @@ export const UserProfile = () => {
               );
             })}
           </div>
-        ) : <p className="text-gray-400">No tienes reservaciones para eventos futuros.</p>;
+        ) : <p className="text-gray-400">{t('profile.noUpcoming') ?? 'No tienes reservaciones para eventos futuros.'}</p>;
         case 'asistidos':
           const pasadas = reservaciones.filter(r => eventDateTime(r.evento) < new Date());
           return pasadas.length > 0 ? (
              <div className="space-y-4">
                 {pasadas.map(res => (
                    <div key={res.id} className="bg-base-300 p-4 rounded-lg opacity-70 flex justify-between items-center">
-                        <h3 className="font-bold text-lg">{res.evento?.nombre || 'Evento Desconocido'}</h3>
-                        <span className="text-sm text-gray-500">Evento finalizado</span>
+                        <h3 className="font-bold text-lg">{res.evento?.nombre || (t('profile.eventUnknown') ?? 'Evento Desconocido')}</h3>
+                        <span className="text-sm text-gray-500">{t('profile.eventFinished') ?? 'Evento finalizado'}</span>
                    </div>
                 ))}
             </div>
-          ) : <p className="text-gray-400">Aún no has asistido a ningún evento.</p>;
+          ) : <p className="text-gray-400">{t('profile.noAttended') ?? 'Aún no has asistido a ningún evento.'}</p>;
       case 'pagos':
-        if (paymentsLoading) return <div className="text-center p-4 text-gray-300">Cargando tus pagos...</div>;
+        if (paymentsLoading) return <div className="text-center p-4 text-gray-300">{t('profile.paymentsLoading') ?? 'Cargando tus pagos...'}</div>;
         if (paymentsError) return <div className="text-center p-4 text-red-300">{paymentsError}</div>;
-        if (!payments || payments.length === 0) return <p className="text-gray-400">Aún no tienes pagos registrados.</p>;
+        if (!payments || payments.length === 0) return <p className="text-gray-400">{t('profile.noPayments') ?? 'Aún no tienes pagos registrados.'}</p>;
 
         const stateBadge = (state: string) => {
           const normalized = (state || '').toLowerCase();
-          if (['approved', 'paid', 'confirmado', 'confirmada'].includes(normalized)) return { label: 'Aprobado', className: 'bg-green-500/20 text-green-200' };
-          if (['rejected', 'failed', 'cancelled', 'canceled'].includes(normalized)) return { label: 'Rechazado', className: 'bg-red-500/20 text-red-300' };
-          return { label: 'Pendiente', className: 'bg-yellow-500/20 text-yellow-200' };
+          if (['approved', 'paid', 'confirmado', 'confirmada'].includes(normalized)) return { label: t('status.confirmed') ?? 'Aprobado', className: 'bg-green-500/20 text-green-200' };
+          if (['rejected', 'failed', 'cancelled', 'canceled'].includes(normalized)) return { label: t('status.rejected') ?? 'Rechazado', className: 'bg-red-500/20 text-red-300' };
+          return { label: t('status.pending') ?? 'Pendiente', className: 'bg-yellow-500/20 text-yellow-200' };
         };
 
         return (
@@ -515,12 +491,12 @@ export const UserProfile = () => {
               return (
                 <div key={id} className="bg-base-300 p-4 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                   <div className="space-y-1">
-                    <div className="text-sm text-gray-400">Pago #{id}</div>
+                    <div className="text-sm text-gray-400">{t('profile.paymentLabel', { id }) ?? `Pago #${id}`}</div>
                     <div className="text-lg font-semibold text-white">${amount.toFixed(2)}</div>
                     <div className="text-sm text-gray-300 flex gap-2 flex-wrap">
-                      <span>{date ? new Date(date).toLocaleString() : 'Fecha no disponible'}</span>
+                      <span>{date ? new Date(date).toLocaleString() : (t('profile.dateMissing') ?? 'Fecha no disponible')}</span>
                       {purpose && <span className="text-gray-400">• {purpose}</span>}
-                      {reservationId && <span className="text-gray-400">• Reserva #{reservationId}</span>}
+                      {reservationId && <span className="text-gray-400">• {(t('profile.reservationNumber', { id: reservationId }) ?? `Reserva #${reservationId}`)}</span>}
                       {eventName && <span className="text-gray-300">• {eventName}</span>}
                     </div>
                   </div>
@@ -533,7 +509,7 @@ export const UserProfile = () => {
                         rel="noreferrer"
                         className="btn btn-sm btn-outline"
                       >
-                        Descargar factura
+                        {t('profile.invoiceDownload') ?? 'Descargar factura'}
                       </a>
                     )}
                   </div>
@@ -562,13 +538,14 @@ export const UserProfile = () => {
 
   return (
     <div className="p-4">
-      <h1 className="text-3xl font-bold mb-6 text-white">Mi Perfil</h1>
+      <h1 className="text-3xl font-bold mb-6 text-white">{t('profile.title') ?? 'Mi Perfil'}</h1>
       <div className="w-full">
         <div className="border-b border-gray-700">
           <nav className="-mb-px flex space-x-2" aria-label="Tabs">
-            <TabButton tabId="reservaciones" label="Mis Reservaciones" />
-            <TabButton tabId="asistidos" label="Mis Eventos Asistidos" />
-            <TabButton tabId="pagos" label="Mis Pagos" />
+            <TabButton tabId="reservaciones" label={t('profile.tab.reservations') ?? 'Mis Reservaciones'} />
+            <TabButton tabId="asistidos" label={t('profile.tab.attended') ?? 'Mis Eventos Asistidos'} />
+            <TabButton tabId="pagos" label={t('profile.tab.payments') ?? 'Mis Pagos'} />
+            <TabButton tabId="perfil" label={t('profile.tab.profile') ?? 'Mi Perfil'} />
           </nav>
         </div>
         <div className="py-6 bg-base-200 p-6 rounded-b-lg min-h-[20rem]">

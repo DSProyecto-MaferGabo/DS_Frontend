@@ -44,18 +44,9 @@ class KeycloakService {
     // so the library can perform the silent SSO inside an iframe instead of redirecting.
     // Wrap in try/catch so we don't leave the app initializing indefinitely if Keycloak is unreachable.
     let authenticated = false;
-    // Add a temporary listener for postMessage events so we can debug silent iframe responses
-    const msgHandler = (ev: MessageEvent) => {
-      try {
-        console.debug('[Keycloak] received postMessage from', ev.origin, 'data=', ev.data);
-      } catch (e) {
-        console.debug('[Keycloak] received postMessage (unserializable)');
-      }
-    };
-    window.addEventListener('message', msgHandler);
     try {
       authenticated = await this.kc.init({
-        onLoad: 'login-required',
+        onLoad: 'check-sso',
         pkceMethod: 'S256',
         checkLoginIframe: false,
         silentCheckSsoRedirectUri: silentUri,
@@ -66,9 +57,6 @@ class KeycloakService {
     } catch (err) {
       console.error('[Keycloak] init() failed:', err);
       authenticated = false;
-    } finally {
-      // remove debug listener
-      window.removeEventListener('message', msgHandler);
     }
     this.authenticated = authenticated;
     this.token = this.kc.token || '';
@@ -83,6 +71,12 @@ class KeycloakService {
       }
     } else {
       this.profile = null;
+    }
+
+    // Strip auth fragments (state/code) that Keycloak sometimes leaves in hash when using HashRouter
+    if (window.location.hash && (window.location.hash.includes('state=') || window.location.hash.includes('code='))) {
+      const cleanUrl = window.location.pathname + window.location.search;
+      window.history.replaceState(null, '', cleanUrl);
     }
 
     if (this.onAuthChange) this.onAuthChange(this.authenticated);
@@ -112,7 +106,7 @@ class KeycloakService {
   }
 
   // keep optional parameter for compatibility with existing calls
-  login(_isAdmin?: boolean) {
+  login(_isAdmin?: boolean, redirectUri?: string) {
     console.debug('[Keycloak] login() called');
     try {
       // Attempt to create the login URL so we can log it for debugging
@@ -126,11 +120,12 @@ class KeycloakService {
     console.debug('[Keycloak] redirecting to Keycloak login');
     // This will redirect the browser to Keycloak's login page
     if (this.kc && typeof this.kc.login === 'function') {
-      this.kc.login();
+      const targetRedirect = redirectUri || `${window.location.origin}${window.location.pathname}`;
+      this.kc.login({ redirectUri: targetRedirect });
     } else {
       // fallback manual redirect
-      const redirectUri = encodeURIComponent(window.location.origin);
-      window.location.href = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth?client_id=${KEYCLOAK_CLIENT}&response_type=code&redirect_uri=${redirectUri}`;
+      const redirect = encodeURIComponent(redirectUri || window.location.origin + window.location.pathname);
+      window.location.href = `${KEYCLOAK_URL}/realms/${KEYCLOAK_REALM}/protocol/openid-connect/auth?client_id=${KEYCLOAK_CLIENT}&response_type=code&redirect_uri=${redirect}`;
     }
   }
 

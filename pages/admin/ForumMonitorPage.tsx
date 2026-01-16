@@ -218,6 +218,18 @@ export const ForumMonitorPage: React.FC = () => {
         content: newMessage.trim(),
         userId: profile?.id ?? 'frontend-user',
       });
+      // Refetch posts to ensure UI reflects latest
+      try {
+        const posts = await forumsApi.getForumPosts(selectedForumId);
+        const ordered = [...posts].sort((a, b) => {
+          const aTime = new Date(a.datePosted ?? '').getTime();
+          const bTime = new Date(b.datePosted ?? '').getTime();
+          return bTime - aTime;
+        });
+        setForumPosts(ordered);
+      } catch (e) {
+        console.warn('No se pudo refrescar publicaciones tras postear', e);
+      }
       setNewTitle('');
       setNewMessage('');
     } catch (err) {

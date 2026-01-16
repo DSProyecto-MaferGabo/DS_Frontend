@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import type { Reservacion, Evento, Usuario } from '../../types';
+import { useI18n } from '../../i18n';
 
 interface PopulatedReservacion extends Reservacion {
     evento?: Evento;
@@ -11,6 +12,7 @@ interface PopulatedReservacion extends Reservacion {
 export const AdminReservations = () => {
     const [reservaciones, setReservaciones] = useState<PopulatedReservacion[]>([]);
     const [loading, setLoading] = useState(true);
+    const { t } = useI18n();
 
     const fetchReservaciones = useCallback(async () => {
         setLoading(true);
@@ -42,20 +44,20 @@ export const AdminReservations = () => {
         fetchReservaciones();
     }, [fetchReservaciones]);
 
-    if (loading) return <p>Cargando reservaciones...</p>;
+    if (loading) return <p>{t('reservations.admin.loading') ?? 'Cargando reservaciones...'}</p>;
 
     return (
         <div>
-            <h1 className="text-3xl font-bold mb-6">Gestión de Reservaciones</h1>
+            <h1 className="text-3xl font-bold mb-6">{t('reservations.admin.title') ?? 'Gestión de Reservaciones'}</h1>
             <div className="bg-base-200 shadow-md rounded-lg overflow-hidden">
                 <table className="min-w-full">
                     <thead className="bg-base-300">
                         <tr>
-                            <th className="text-left py-3 px-4">ID Reserva</th>
-                            <th className="text-left py-3 px-4">Evento</th>
-                            <th className="text-left py-3 px-4">Usuario</th>
-                            <th className="text-left py-3 px-4">Asientos</th>
-                            <th className="text-left py-3 px-4">Estado</th>
+                            <th className="text-left py-3 px-4">{t('reservations.admin.table.id') ?? 'ID Reserva'}</th>
+                            <th className="text-left py-3 px-4">{t('reservations.admin.table.event') ?? 'Evento'}</th>
+                            <th className="text-left py-3 px-4">{t('reservations.admin.table.user') ?? 'Usuario'}</th>
+                            <th className="text-left py-3 px-4">{t('reservations.admin.table.seats') ?? 'Asientos'}</th>
+                            <th className="text-left py-3 px-4">{t('reservations.admin.table.state') ?? 'Estado'}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -63,7 +65,7 @@ export const AdminReservations = () => {
                             <tr key={res.id} className="border-b border-base-300 hover:bg-base-300/50">
                                 <td className="py-3 px-4">{res.id}</td>
                                 <td className="py-3 px-4">{res.evento?.nombre || 'N/A'}</td>
-                                <td className="py-3 px-4">{res.usuario?.nombre || 'N/A'}</td>
+                                <td className="py-3 px-4">{(res.usuario as any)?.nombre || (res.usuario as any)?.username || 'N/A'}</td>
                                 <td className="py-3 px-4">{res.asientos}</td>
                                 <td className="py-3 px-4">
                                     <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -71,7 +73,7 @@ export const AdminReservations = () => {
                                         res.estado === 'PENDIENTE' ? 'bg-yellow-500/20 text-yellow-300' :
                                         'bg-gray-500/20 text-gray-300'
                                     }`}>
-                                        {res.estado}
+                                        {res.estado || t('reservations.admin.table.state')}
                                     </span>
                                 </td>
                             </tr>

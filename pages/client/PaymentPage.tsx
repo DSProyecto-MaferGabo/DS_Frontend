@@ -7,6 +7,7 @@ import { useKeycloak } from '../../hooks/useKeycloak';
 import { Button } from '../../components/ui/Button';
 import { joinReservationChannel, leaveReservationChannel, joinUserChannel, leaveUserChannel, registerPaymentResultHandler, registerServiceStatusHandler, type ServiceStatusPayload } from '../../services/notificationHubClient';
 import { getReservationServiceStatuses, setReservationServiceStatuses } from '../../services/serviceStatusCache';
+import { useI18n } from '../../i18n';
 
 type ServiceStatusState = {
   serviceId: number;
@@ -26,6 +27,7 @@ export const PaymentPage = () => {
   const isStreamingEvent = (evento as any)?.eventFormat === 'streaming';
   const { holdToken, holdExpires } = state as any;
   const { profile } = useKeycloak();
+  const { t } = useI18n();
 
   const normalizedSelectedServices = React.useMemo(() => {
     return (selectedServices || []).map((s: any) => ({
@@ -207,14 +209,14 @@ export const PaymentPage = () => {
 
       if (normalized === 'APPROVED') {
         setPaymentStatus('approved');
-        setPaymentDetail(detail || 'Pago aprobado, tu reservación quedó confirmada.');
+        setPaymentDetail(detail || t('payment.status.approved'));
         clearHoldCache();
         setTimeout(() => {
           navigate('/perfil', { state: { highlightReservation: resId } });
         }, 2000);
       } else {
         setPaymentStatus('rejected');
-        setPaymentDetail(detail || 'Pago rechazado. Revisa el método seleccionado e intenta de nuevo.');
+        setPaymentDetail(detail || t('payment.status.rejected'));
       }
     };
 
@@ -261,8 +263,8 @@ export const PaymentPage = () => {
   if (!evento && !existingReservation) {
     return (
       <div className="text-center p-8">
-        <h1 className="text-2xl font-bold">No hay nada que pagar</h1>
-        <Button onClick={() => navigate('/')}>Volver al inicio</Button>
+        <h1 className="text-2xl font-bold">{t('payment.status.pending')}</h1>
+        <Button onClick={() => navigate('/')}>{t('checkout.noSeats.backHome')}</Button>
       </div>
     );
   }
@@ -278,14 +280,14 @@ export const PaymentPage = () => {
   const handleConfirmPayment = async () => {
     if (processing) return;
     if (!method) {
-      alert('Selecciona un método de pago.');
+      alert(t('payment.selectMethod'));
       return;
     }
 
     const amountToCharge = Number(((existingReservation?.total ?? effectiveTotal)).toFixed(2));
     setProcessing(true);
     setPaymentStatus('creating');
-    setPaymentDetail('Creando reservación y preparando el pago...');
+    setPaymentDetail(t('payment.processing'));
     setWaitingNotification(false);
     setPaymentId(null);
 
@@ -376,7 +378,7 @@ export const PaymentPage = () => {
       {holdToken && (
         <div className="mb-4">
           <div className="bg-red-600 text-white p-4 rounded-lg shadow-md font-bold text-center">
-            <div>Tienes asientos reservados temporalmente. Finaliza el pago antes de que caduque.</div>
+            <div>{t('payment.hold', { time: `${Math.floor((holdRemaining ?? 0)/60)}:${String((holdRemaining ?? 0)%60).padStart(2,'0')}` })}</div>
             {holdRemaining !== null ? (
               <div className="mt-3 flex items-center justify-center gap-3">
                 <div className="bg-black text-white px-3 py-1 rounded font-mono text-lg" aria-live="polite" aria-atomic="true">{Math.floor(holdRemaining/60).toString().padStart(2,'0')}</div>

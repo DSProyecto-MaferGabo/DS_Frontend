@@ -5,11 +5,13 @@ import { Button } from '../../components/ui/Button';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import api from '../../services/api';
 import reservationsApi from '../../services/reservationsApi';
+import { useI18n } from '../../i18n';
 
 export const CheckoutPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile } = useKeycloak();
+  const { t } = useI18n();
   
   const {
     selectedSeats,
@@ -43,8 +45,8 @@ export const CheckoutPage = () => {
   if (!evento || selectedSeats.length === 0) {
     return (
       <div className="text-center p-8">
-        <h1 className="text-2xl font-bold">No has seleccionado asientos.</h1>
-        <Button onClick={() => navigate('/')} className="mt-4">Volver al inicio</Button>
+        <h1 className="text-2xl font-bold">{t('checkout.noSeats.title')}</h1>
+        <Button onClick={() => navigate('/')} className="mt-4">{t('checkout.noSeats.backHome')}</Button>
       </div>
     );
   }
@@ -111,25 +113,27 @@ export const CheckoutPage = () => {
       {holdToken && holdRemaining > 0 && (
         <div className="mb-4 sticky top-4 z-30">
           <div className="bg-red-600 text-white p-3 rounded-lg shadow-md font-bold text-center">
-            Asientos retenidos. Tiempo restante: {Math.floor(holdRemaining/60)}:{String(holdRemaining%60).padStart(2,'0')} — completa el pago antes de que expire.
+            {t('checkout.hold.banner', {
+              time: `${Math.floor(holdRemaining/60)}:${String(holdRemaining%60).padStart(2,'0')}`
+            })}
           </div>
         </div>
       )}
-      <h1 className="text-4xl font-bold text-white mb-8 border-b-2 border-primary pb-2">Confirmar Reserva</h1>
+      <h1 className="text-4xl font-bold text-white mb-8 border-b-2 border-primary pb-2">{t('checkout.title')}</h1>
       <div className="bg-base-200 p-8 rounded-lg shadow-lg">
         <h2 className="text-2xl font-semibold mb-4">{evento.nombre}</h2>
         <div className="mb-6 border-b border-base-300 pb-6">
-          <h3 className="text-xl font-semibold text-primary mb-3">Resumen del Pedido</h3>
+          <h3 className="text-xl font-semibold text-primary mb-3">{t('checkout.orderSummary')}</h3>
           {selectedSeats.map(seat => (
             <div key={seat.id} className="flex justify-between items-center text-gray-300 py-1">
-              <span>Asiento: {seat.fila} - {seat.numero} ({zonasMap[seat.zonaId]?.nombre})</span>
+              <span>{t('checkout.seatLabel')}: {seat.fila} - {seat.numero} ({zonasMap[seat.zonaId]?.nombre})</span>
               <span>${zonasMap[seat.zonaId]?.precio.toFixed(2)}</span>
             </div>
           ))}
         </div>
         {availableServices.length > 0 && (
           <div className="mb-6 border-b border-base-300 pb-6">
-            <h3 className="text-xl font-semibold text-primary mb-3">Servicios Adicionales</h3>
+            <h3 className="text-xl font-semibold text-primary mb-3">{t('checkout.additionalServices')}</h3>
             <div className="space-y-2">
               {availableServices.map(s => (
                 <label key={s.Id} className="flex items-center justify-between text-gray-300 py-2">
@@ -145,27 +149,27 @@ export const CheckoutPage = () => {
         )}
         <div className="space-y-2 text-lg">
             <div className="flex justify-between font-medium">
-                <span>Subtotal:</span>
+                <span>{t('checkout.subtotal')}:</span>
                 <span>${subtotal.toFixed(2)}</span>
             </div>
             {servicesTotal > 0 && (
               <div className="flex justify-between font-medium text-gray-200">
-                <span>Servicios adicionales:</span>
+                <span>{t('checkout.servicesTotal')}:</span>
                 <span>${servicesTotal.toFixed(2)}</span>
               </div>
             )}
             <div className="flex justify-between text-gray-400">
-                <span>Tasa de Servicio (10%):</span>
+                <span>{t('checkout.serviceFee')}:</span>
                 <span>${serviceFee.toFixed(2)}</span>
             </div>
             <div className="flex justify-between font-bold text-2xl text-primary pt-4 border-t border-base-300">
-                <span>Total:</span>
+                <span>{t('checkout.total')}:</span>
                 <span>${total.toFixed(2)}</span>
             </div>
         </div>
         <div className="mt-8 text-right">
             <Button onClick={handleConfirmReservation} size="lg" variant="primary">
-                Confirmar y Pagar
+                {t('checkout.confirmPay')}
             </Button>
         </div>
       </div>

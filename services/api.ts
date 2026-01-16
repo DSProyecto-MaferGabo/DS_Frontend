@@ -23,6 +23,9 @@ const api = {
   delete: async <T,>(path: string): Promise<T> => {
     return request<T>(path, 'DELETE');
   },
+  patch: async <T,>(path: string, body: any): Promise<T> => {
+    return request<T>(path, 'PATCH', body);
+  },
 };
 
 async function request<T,>(path: string, method: string, body?: any): Promise<T> {

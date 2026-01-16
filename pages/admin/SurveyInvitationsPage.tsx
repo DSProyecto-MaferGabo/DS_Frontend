@@ -1,9 +1,10 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import eventsApi from '../../services/eventsApi';
+import keycloak from '../../services/keycloakService';
 import surveysApi from '../../services/surveysApi';
 import reservationsApi from '../../services/reservationsApi';
-import { t } from '../../i18n';
+import { useI18n } from '../../i18n';
 import type { Evento, SurveyInvitation, SurveyInvitationSummary } from '../../types';
 import { CheckCircleIcon, ExclamationTriangleIcon, XCircleIcon } from '@heroicons/react/24/outline';
 
@@ -19,6 +20,7 @@ const statusStyles: Record<string, string> = {
 };
 
 export const SurveyInvitationsPage: React.FC = () => {
+  const { t } = useI18n();
   const [events, setEvents] = useState<Evento[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<number | null>(null);
   const [summary, setSummary] = useState<SurveyInvitationSummary | null>(null);
@@ -32,7 +34,9 @@ export const SurveyInvitationsPage: React.FC = () => {
   useEffect(() => {
     const loadEvents = async () => {
       try {
-        const data = await eventsApi.getMyEvents();
+        // Admins see all events, others see only their own
+        const isAdmin = keycloak.hasRealmRole('administrador');
+        const data = isAdmin ? await eventsApi.getEvents() : await eventsApi.getMyEvents();
         const now = new Date();
         const finalized = (data || []).filter((evt: any) => {
           if (!evt?.fecha) return false;
@@ -45,7 +49,7 @@ export const SurveyInvitationsPage: React.FC = () => {
         }
       } catch (err) {
         console.error('Error loading events', err);
-        setFlash({ type: 'error', message: 'No se pudieron cargar tus eventos.' });
+        setFlash({ type: 'error', message: t('survey.load.error') || 'No se pudieron cargar los eventos.' });
       } finally {
         setLoadingEvents(false);
       }
@@ -82,7 +86,7 @@ export const SurveyInvitationsPage: React.FC = () => {
         }
       } catch (err) {
         console.error('Error loading invitations', err);
-        setFlash({ type: 'error', message: 'No se pudieron obtener las invitaciones de encuestas.' });
+        setFlash({ type: 'error', message: t('survey.load.error') || 'No se pudieron obtener las invitaciones de encuestas.' });
       } finally {
         setLoadingSummary(false);
       }
@@ -116,12 +120,12 @@ export const SurveyInvitationsPage: React.FC = () => {
     try {
       setPendingAction(true);
       await surveysApi.resendInvitation(selectedEventId, invitation.id);
-      showFlash({ type: 'success', message: `Notificación reenviada a ${invitation.userId}` });
+      showFlash({ type: 'success', message: t('survey.resend.success', { user: invitation.userId || '' }) ?? `Notificación reenviada a ${invitation.userId}` });
       const data = await surveysApi.getInvitations(selectedEventId);
       setSummary(data);
     } catch (err) {
       console.error('Error resending notification', err);
-      showFlash({ type: 'error', message: 'No se pudo re-notificar al asistente.' });
+      showFlash({ type: 'error', message: t('survey.resend.error') || 'No se pudo re-notificar al asistente.' });
     } finally {
       setPendingAction(false);
     }
@@ -132,12 +136,12 @@ export const SurveyInvitationsPage: React.FC = () => {
     try {
       setPendingAction(true);
       await surveysApi.resendPending(selectedEventId);
-      showFlash({ type: 'success', message: 'Se reenviaron las invitaciones pendientes.' });
+      showFlash({ type: 'success', message: t('survey.resendPending.success') || 'Se reenviaron las invitaciones pendientes.' });
       const data = await surveysApi.getInvitations(selectedEventId);
       setSummary(data);
     } catch (err) {
       console.error('Error resending pending invitations', err);
-      showFlash({ type: 'error', message: 'No se pudieron re-notificar los asistentes pendientes.' });
+      showFlash({ type: 'error', message: t('survey.resendPending.error') || 'No se pudieron re-notificar los asistentes pendientes.' });
     } finally {
       setPendingAction(false);
     }
@@ -148,12 +152,12 @@ export const SurveyInvitationsPage: React.FC = () => {
     try {
       setPendingAction(true);
       await surveysApi.generateInvitations(selectedEventId);
-      showFlash({ type: 'success', message: 'Invitaciones generadas y notificadas.' });
+      showFlash({ type: 'success', message: t('survey.generate.success') || 'Invitaciones generadas y notificadas.' });
       const data = await surveysApi.getInvitations(selectedEventId);
       setSummary(data);
     } catch (err) {
       console.error('Error generating invitations', err);
-      showFlash({ type: 'error', message: 'No se pudieron generar las invitaciones.' });
+      showFlash({ type: 'error', message: t('survey.generate.error') || 'No se pudieron generar las invitaciones.' });
     } finally {
       setPendingAction(false);
     }

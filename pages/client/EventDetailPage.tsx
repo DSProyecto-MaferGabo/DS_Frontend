@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/Button';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import { CalendarIcon, MapPinIcon } from '@heroicons/react/24/solid';
 import { EventCard } from '../../components/EventCard';
+import supportApi from '../../services/supportApi';
 
 const FORMAT_LABELS: Record<EventFormat, string> = {
   presencial: 'Evento presencial',
@@ -16,6 +17,7 @@ const FORMAT_LABELS: Record<EventFormat, string> = {
 };
 
 const POSTER_FALLBACK = 'https://picsum.photos/seed/ds-detail/960/640';
+const MEDIA_PUBLIC_BASE = import.meta.env.VITE_MEDIA_PUBLIC_BASE_URL || '';
 
 const FORMAT_BADGE_CLASSES: Record<EventFormat, string> = {
   presencial: 'bg-emerald-500/15 text-emerald-200 border border-emerald-400/30',
@@ -51,7 +53,11 @@ const buildStreamingEmbedUrl = (raw?: string | null) => {
 
 const resolveAssetUrl = (asset: MediaFileRecord | null) => {
   if (!asset) return null;
-  return asset.publicUrl ?? (asset as any)?.url ?? null;
+  const candidate = asset.publicUrl ?? (asset as any)?.url ?? null;
+  if (!candidate) return null;
+  if (/^https?:\/\//i.test(candidate)) return candidate;
+  if (MEDIA_PUBLIC_BASE) return `${MEDIA_PUBLIC_BASE.replace(/\/+$/, '')}/${candidate.replace(/^\/+/, '')}`;
+  return candidate;
 };
 
 const resolveAssetName = (asset: MediaFileRecord | null, fallback: string) => {
@@ -72,10 +78,40 @@ export const EventDetailPage = () => {
   const [programAsset, setProgramAsset] = useState<MediaFileRecord | null>(null);
   const [receiptAsset, setReceiptAsset] = useState<MediaFileRecord | null>(null);
   const [mediaLoading, setMediaLoading] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportDesc, setReportDesc] = useState('');
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSending, setReportSending] = useState(false);
+  const [signedLink, setSignedLink] = useState<string | null>(null);
 
   const { profile, authenticated } = useKeycloak();
   const [hasTicket, setHasTicket] = useState<boolean>(false);
   const [simulatedStreaming, setSimulatedStreaming] = useState<boolean>(false);
+
+  const canReport = authenticated && !!profile && !!evento?.ownerId;
+
+  const submitReport = async () => {
+    if (!evento?.ownerId || !id) return;
+    setReportSending(true);
+    setReportError(null);
+    try {
+      await supportApi.createTicket({
+        eventId: Number(id),
+        organizerUserId: Number(evento.ownerId),
+        title: reportTitle || `Problema con evento #${id}`,
+        description: reportDesc || 'Problema reportado por el cliente.'
+      });
+      setReportModalOpen(false);
+      setReportTitle('');
+      setReportDesc('');
+    } catch (e) {
+      console.error('No se pudo enviar el ticket', e);
+      setReportError('No se pudo enviar el ticket de soporte.');
+    } finally {
+      setReportSending(false);
+    }
+  };
 
   useEffect(() => {
     const fetchEvento = async () => {
@@ -189,6 +225,14 @@ export const EventDetailPage = () => {
     if (!id) return;
     let cancelled = false;
     const loadAssets = async () => {
+      // si el endpoint requiere auth, evita 401 si no hay token
+      try { await keycloak.ensureTokenValid(10); } catch {}
+      const hasToken = !!keycloak.getToken();
+      if (!hasToken) {
+        setProgramAsset(null);
+        setReceiptAsset(null);
+        return;
+      }
       setMediaLoading(true);
       try {
         const [programFiles, receiptFiles] = await Promise.all([
@@ -274,12 +318,15 @@ export const EventDetailPage = () => {
   const streamingEmbedUrl = buildStreamingEmbedUrl(streamingUrl);
   const streamingReady = isStreamingFormat(eventFormat);
   const streamingPrice = Number((evento as any).generalPrice ?? 0) || 0;
-  const posterSrc = typeof evento.posterUrl === 'string' && evento.posterUrl.trim().length > 0 ? evento.posterUrl : POSTER_FALLBACK;
+  const posterSrc = (() => {
+    const poster = (evento as any).posterUrl || (evento as any).PosterUrl || (evento as any).poster || '';
+    if (poster && /^https?:\/\//i.test(poster)) return poster;
+    if (poster && MEDIA_PUBLIC_BASE) return `${MEDIA_PUBLIC_BASE.replace(/\/+$/, '')}/${poster.replace(/^\/+/, '')}`;
+    return POSTER_FALLBACK;
+  })();
   const programUrl = resolveAssetUrl(programAsset);
   const receiptUrl = resolveAssetUrl(receiptAsset);
   const hasDownloads = Boolean(programAsset || receiptAsset || mediaLoading);
-  const [signedLink, setSignedLink] = useState<string | null>(null);
-
   const generateSignedStreamingUrl = () => {
     if (!streamingUrl || !hasTicket) {
       setSignedLink(null);
@@ -498,6 +545,15 @@ export const EventDetailPage = () => {
         </div>
       </div>
 
+      {/* Reportar problema */}
+      {canReport && (
+        <div className="mt-6">
+          <Button variant="secondary" onClick={() => setReportModalOpen(true)}>
+            Reportar problema / Contactar soporte
+          </Button>
+        </div>
+      )}
+
       {recommended && recommended.length > 0 && (
         <div className="container mx-auto px-4 py-8 relative">
           <h2 className="text-2xl font-bold text-white mb-4">Eventos recomendados</h2>
@@ -551,6 +607,42 @@ export const EventDetailPage = () => {
             )}
           </div>
           <style>{`.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; } .hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+        </div>
+      )}
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-base-200 rounded-lg p-6 w-full max-w-lg space-y-4 border border-base-300">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Reportar problema</h3>
+              <button className="text-gray-400 hover:text-white" onClick={() => setReportModalOpen(false)}>✕</button>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-gray-300">Título</label>
+              <input
+                className="w-full bg-base-300 text-white px-3 py-2 rounded border border-base-400"
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                placeholder="Ej. No pude descargar mis entradas"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm text-gray-300">Descripción</label>
+              <textarea
+                className="w-full bg-base-300 text-white px-3 py-2 rounded border border-base-400"
+                rows={4}
+                value={reportDesc}
+                onChange={(e) => setReportDesc(e.target.value)}
+                placeholder="Describe el problema: pago fallido, acceso a streaming, etc."
+              />
+            </div>
+            {reportError && <div className="text-red-400 text-sm">{reportError}</div>}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setReportModalOpen(false)}>Cancelar</Button>
+              <Button variant="primary" disabled={reportSending} onClick={submitReport}>
+                {reportSending ? 'Enviando...' : 'Enviar'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

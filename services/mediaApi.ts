@@ -1,6 +1,6 @@
 import keycloak from './keycloakService';
 
-const BASE_URL = import.meta.env.VITE_MEDIAFILE_API_URL || 'http://localhost:5125/api';
+const BASE_URL = import.meta.env.VITE_MEDIAFILE_API_URL || 'http://127.0.0.1:5449/api';
 
 const MEDIA_ENDPOINT = `${BASE_URL}/File`;
 
@@ -27,6 +27,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
       body = await res.text();
     } catch {
       body = null;
+    }
+    // Si no hay token o expira, devolver vacío para no romper la UI
+    if (res.status === 401) {
+      console.warn('[mediaApi] 401, devolviendo lista vacía/objeto vacío');
+      return {} as T;
     }
     const error = new Error(`HTTP ${res.status}`);
     (error as any).status = res.status;

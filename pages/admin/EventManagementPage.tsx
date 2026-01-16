@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import eventsApi from '../../services/eventsApi';
+import keycloak from '../../services/keycloakService';
 import type { Evento } from '../../types';
 import { Button } from '../../components/ui/Button';
 
@@ -29,7 +30,10 @@ export const EventManagementPage = () => {
   const fetchEventos = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await eventsApi.getMyEvents();
+      // Use getAdminEvents if user is admin, otherwise getMyEvents
+      const isAdmin = keycloak.hasRealmRole('administrador');
+      // Si es admin, trae todos los eventos y muestra todos
+      const data = isAdmin ? await eventsApi.getEvents() : await eventsApi.getMyEvents();
       // also load stages to display human-friendly stage names
       try {
         const stages = await eventsApi.getStages();

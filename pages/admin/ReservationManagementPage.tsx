@@ -3,6 +3,7 @@ import api from '../../services/api';
 import reservationsApi from '../../services/reservationsApi';
 import eventsApi from '../../services/eventsApi';
 import type { Reservacion, Evento, Usuario } from '../../types';
+import { useI18n } from '../../i18n';
 
 interface PopulatedReservacion extends Reservacion {
     evento?: Evento;
@@ -18,6 +19,7 @@ export const ReservationManagementPage = () => {
     const [seatsByStage, setSeatsByStage] = useState<Record<number, { seats: any[]; zonas: any[] }>>({});
     const [usersForbidden, setUsersForbidden] = useState(false);
     const [additionalServicesMap, setAdditionalServicesMap] = useState<Record<number, any>>({});
+    const { t } = useI18n();
 
     const fetchReservaciones = useCallback(async () => {
         setLoading(true);
@@ -146,7 +148,7 @@ export const ReservationManagementPage = () => {
         fetchReservaciones();
     }, [fetchReservaciones]);
 
-            if (loading) return <p>Cargando reservaciones y eventos...</p>;
+            if (loading) return <p>{t('reservations.mgmt.loading')}</p>;
 
             // Build a map of reservations per event
             const reservationsByEvent = new Map<number, PopulatedReservacion[]>();
@@ -159,7 +161,7 @@ export const ReservationManagementPage = () => {
             // Events grid
             return (
                 <div>
-                    <h1 className="text-3xl font-bold mb-6">Gestión de Reservaciones</h1>
+                    <h1 className="text-3xl font-bold mb-6">{t('reservations.mgmt.title')}</h1>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                         {events.map(ev => {
@@ -184,7 +186,7 @@ export const ReservationManagementPage = () => {
                                                 <div className="text-sm text-gray-400">{new Date(ev.fecha).toLocaleDateString()} · {ev.ubicacion}</div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="text-sm text-gray-400">Reservas</div>
+                                            <div className="text-sm text-gray-400">{t('reservations.mgmt.reservations')}</div>
                                                 <div className="font-semibold text-xl">{count}</div>
                                             </div>
                                         </div>

@@ -1,34 +1,57 @@
 import keycloak from './keycloakService';
 import type { SurveyInvitationSummary } from '../types';
 
-const BASE_URL = import.meta.env.VITE_SURVEYS_API_URL || 'http://localhost:5098/api';
+const BASE_URL = import.meta.env.VITE_SURVEYS_API_URL || 'http://localhost:5206/api';
+const GATEWAY_BASE = import.meta.env.VITE_API_GATEWAY_URL || 'http://127.0.0.1:5278/api';
 
 type Json = any;
 
 async function request<T>(path: string, method = 'GET', body?: any): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  // Delegate to absolute helper with BASE_URL prefix
+  return requestAbsolute<T>(`${BASE_URL}${path}`, method, body);
+}
+
+async function requestAbsolute<T>(url: string, method = 'GET', body?: any): Promise<T> {
+  const buildHeaders = (withAuth: boolean) => {
+    const h: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (withAuth) {
+      const token = keycloak.getToken();
+      if (token) h['Authorization'] = `Bearer ${token}`;
+    }
+    return h;
+  };
+
   try {
     await keycloak.ensureTokenValid(30);
   } catch {
-    // ignore, request may still succeed if endpoint is public
-  }
-  const token = keycloak.getToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  if (!res.ok) {
-    const message = await res.text().catch(() => '');
-    throw new Error(message || `HTTP ${res.status}`);
+    // ignore
   }
 
-  if (res.status === 204) return {} as T;
-  const text = await res.text();
-  return text ? (JSON.parse(text) as T) : ({} as T);
+  const doFetch = async (withAuth: boolean) => {
+    const res = await fetch(url, {
+      method,
+      headers: buildHeaders(withAuth),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) {
+      return { ok: false, status: res.status, text: await res.text().catch(() => '') };
+    }
+    if (res.status === 204) return { ok: true, data: {} as T, text: '' };
+    const text = await res.text();
+    return { ok: true, data: text ? (JSON.parse(text) as T) : ({} as T), text };
+  };
+
+  // first try with auth, then without (some envs may not require auth or have audience mismatch)
+  let result = await doFetch(true);
+  if (!result.ok && result.status === 401) {
+    result = await doFetch(false);
+  }
+  if (!result.ok) {
+    const err: any = new Error(result.text || `HTTP ${result.status}`);
+    err.status = result.status;
+    throw err;
+  }
+  return result.data as T;
 }
 
 function normalizeSummary(raw: Json): SurveyInvitationSummary {
@@ -56,8 +79,29 @@ function normalizeSummary(raw: Json): SurveyInvitationSummary {
 
 export default {
   getInvitations: async (eventId: number) => {
-    const data = await request<Json>(`/events/${eventId}/survey-invitations`);
-    return normalizeSummary(data);
+    // Try backend direct, then gateway path if protected by gateway
+    const paths = [
+      `${BASE_URL}/events/${eventId}/survey-invitations`,
+      `${BASE_URL}/surveys/events/${eventId}/survey-invitations`,
+      `${GATEWAY_BASE}/surveys/events/${eventId}/survey-invitations`,
+      `${GATEWAY_BASE}/Surveys/events/${eventId}/survey-invitations`,
+      `${GATEWAY_BASE}/events/${eventId}/survey-invitations`
+    ];
+    let lastErr: any = null;
+    for (const url of paths) {
+      try {
+        const data = await requestAbsolute<Json>(url, 'GET');
+        return normalizeSummary(data);
+      } catch (e: any) {
+        lastErr = e;
+        continue;
+      }
+    }
+    // if unauthorized or not found, return empty summary to keep UI usable
+    if (lastErr?.status === 401 || lastErr?.status === 404) {
+      return normalizeSummary({ eventId, invitations: [], total: 0, notified: 0, responded: 0, pending: 0 });
+    }
+    throw lastErr ?? new Error('Failed to load survey invitations');
   },
   resendInvitation: (eventId: number, invitationId: number) =>
     request(`/events/${eventId}/survey-invitations/${invitationId}/resend`, 'POST'),

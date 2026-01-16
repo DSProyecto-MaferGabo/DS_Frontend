@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useI18n } from '../../i18n';
 import forumsApi, {
   ForumTopic,
   ForumPost,
@@ -24,6 +25,7 @@ export const EventForumPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile } = useKeycloak();
+  const { t } = useI18n();
   const [forums, setForums] = useState<ForumTopic[]>([]);
   const [selectedForumId, setSelectedForumId] = useState<number | null>(null);
   const [posts, setPosts] = useState<ForumPost[]>([]);
@@ -43,7 +45,7 @@ export const EventForumPage: React.FC = () => {
   const loadForums = useCallback(async () => {
     if (!accessChecked || !hasAccess) return;
     if (!eventId || Number.isNaN(eventId)) {
-      setError('Evento inválido para foros.');
+      setError(t('forum.invalidEvent'));
       return;
     }
     setLoadingForums(true);
@@ -58,7 +60,7 @@ export const EventForumPage: React.FC = () => {
       }
     } catch (err) {
       console.error('No se pudieron cargar los foros del evento', err);
-      setError('No se pudieron cargar los foros asociados.');
+      setError(t('forum.load.error'));
     } finally {
       setLoadingForums(false);
     }
@@ -101,15 +103,18 @@ export const EventForumPage: React.FC = () => {
         const hasTicket = (reservations || []).some((r: any) => {
           const evId = Number(r.eventoId ?? r.EventId ?? r.eventId ?? r.EventoId ?? 0);
           const estado = String(r.estado ?? r.State ?? r.state ?? '').toLowerCase();
-          return evId === Number(eventId) && paidStates.includes(estado);
+          if (evId !== Number(eventId)) return false;
+          if (paidStates.includes(estado)) return true;
+          // permitir si no está cancelada
+          return estado !== 'cancelada' && estado !== 'cancelado';
         });
         setHasAccess(hasTicket);
         if (!hasTicket) {
-          setAccessMessage('Solo usuarios con entrada confirmada u organizador del evento pueden acceder al foro.');
+          setAccessMessage(t('forum.access.denied'));
         }
       } catch (err) {
         console.error('No se pudo verificar acceso al foro', err);
-        setAccessMessage('No se pudo verificar el acceso al foro. Intenta nuevamente.');
+        setAccessMessage(t('forum.access.error'));
       } finally {
         setAccessChecked(true);
       }
@@ -185,12 +190,17 @@ export const EventForumPage: React.FC = () => {
   const selectedForum = useMemo(() => forums.find(f => f.id === selectedForumId) ?? null, [forums, selectedForumId]);
 
   const handleCreatePost = async () => {
+      // Log para publicación de post
+      const logPublishPost = () => {
+        console.log('[FORUM] Click en publicar post', { title: newPostTitle, content: newPostContent });
+      };
+      logPublishPost();
     if (!selectedForum || !eventId || !hasAccess) {
-      alert('Selecciona un foro válido.');
+      alert(t('forum.create.selectValid'));
       return;
     }
     if (!newPostTitle.trim() || !newPostContent.trim()) {
-      alert('Completa el título y el contenido.');
+      alert(t('forum.create.fillFields'));
       return;
     }
 
@@ -206,11 +216,16 @@ export const EventForumPage: React.FC = () => {
       setNewPostContent('');
     } catch (err) {
       console.error('No se pudo crear la publicación', err);
-      alert('No se pudo crear la publicación.');
+      alert(t('forum.create.error'));
     }
   };
 
   const handleSendComment = async (postId: number) => {
+      // Log para publicación de comentario
+      const logPublishComment = (postId: number) => {
+        console.log('[FORUM] Click en publicar comentario', { postId, content: commentDrafts[postId] });
+      };
+      logPublishComment(postId);
     const text = commentDrafts[postId]?.trim();
     if (!text) return;
     if (!selectedForum || !hasAccess) return;
@@ -224,22 +239,22 @@ export const EventForumPage: React.FC = () => {
       setCommentDrafts(prev => ({ ...prev, [postId]: '' }));
     } catch (err) {
       console.error('No se pudo enviar el comentario', err);
-      alert('No se pudo enviar tu comentario.');
+      alert(t('forum.comment.error'));
     }
   };
 
   if (!eventId || Number.isNaN(eventId)) {
-    return <div className="text-center p-10">Evento inválido.</div>;
+    return <div className="text-center p-10">{t('forum.invalidEvent')}</div>;
   }
 
   if (accessChecked && !hasAccess) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center space-y-4">
-        <h1 className="text-3xl font-bold">Acceso restringido</h1>
-        <p className="text-gray-300">{accessMessage || 'Solo usuarios con entrada confirmada u organizador del evento pueden acceder al foro.'}</p>
+        <h1 className="text-3xl font-bold">{t('forum.access.denied')}</h1>
+        <p className="text-gray-300">{accessMessage || t('forum.access.denied')}</p>
         <div className="flex justify-center gap-3">
-          <Button onClick={() => navigate(`/evento/${eventId}`)} variant="secondary">Volver al evento</Button>
-          <Button onClick={() => navigate('/')}>Ir al inicio</Button>
+          <Button onClick={() => navigate(`/evento/${eventId}`)} variant="secondary">{t('forum.backToEvent') ?? t('checkout.noSeats.backHome')}</Button>
+          <Button onClick={() => navigate(-1)}>{t('forum.goBack') ?? 'Volver atrás'}</Button>
         </div>
       </div>
     );
@@ -248,11 +263,9 @@ export const EventForumPage: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <header className="space-y-2 text-center">
-        <p className="uppercase tracking-widest text-sm text-primary">Comunidad en vivo</p>
-        <h1 className="text-4xl font-extrabold">Foro del Evento</h1>
-        <p className="text-gray-300">
-          Chatea con asistentes y organizadores en tiempo real. Los mensajes aparecen al instante gracias a SignalR.
-        </p>
+          <p className="uppercase tracking-widest text-sm text-primary">{t('forum.live')}</p>
+          <h1 className="text-4xl font-extrabold">{t('forums.title')}</h1>
+          <p className="text-gray-300">{t('forum.liveDesc')}</p>
       </header>
 
       {error && <div className="bg-red-500/20 border border-red-500 text-red-200 p-3 rounded-lg text-center">{error}</div>}
@@ -260,12 +273,12 @@ export const EventForumPage: React.FC = () => {
       <div className="grid gap-6 lg:grid-cols-3">
         <section className="bg-base-200/60 rounded-2xl p-5 border border-base-300 flex flex-col">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-xl font-semibold">Foros del evento</h2>
-            {loadingForums && <span className="text-xs text-gray-400">Cargando...</span>}
+            <h2 className="text-xl font-semibold">{t('forums.title') ?? 'Foros del evento'}</h2>
+            {loadingForums && <span className="text-xs text-gray-400">{t('forum.loadingForums')}</span>}
           </div>
           <div className="space-y-3 overflow-y-auto max-h-[500px] pr-1">
             {forums.length === 0 && !loadingForums && (
-              <p className="text-sm text-gray-400">Aún no hay foros configurados para este evento.</p>
+              <p className="text-sm text-gray-400">{t('forum.noForums')}</p>
             )}
             {forums.map(forum => (
               <button
@@ -276,7 +289,7 @@ export const EventForumPage: React.FC = () => {
                 }`}
               >
                 <div className="font-semibold text-lg">{forum.title}</div>
-                <p className="text-xs text-gray-400 line-clamp-2 mt-1">{forum.description || 'Sin descripción.'}</p>
+                <p className="text-xs text-gray-400 line-clamp-2 mt-1">{forum.description || t('forum.noDescription') || 'Sin descripción.'}</p>
               </button>
             ))}
           </div>
@@ -297,22 +310,22 @@ export const EventForumPage: React.FC = () => {
               </div>
 
               <div className="bg-base-100/60 rounded-xl border border-base-300 p-4 space-y-3">
-                <h3 className="text-lg font-semibold">Crear publicación</h3>
+              <h3 className="text-lg font-semibold">{t('forum.newPost')}</h3>
                 <input
                   value={newPostTitle}
                   onChange={e => setNewPostTitle(e.target.value)}
-                  placeholder="Título de tu mensaje"
+                placeholder={t('forum.titlePlaceholder')}
                   className="w-full p-3 rounded bg-base-200 border border-base-300 focus:outline-none focus:border-primary"
                 />
                 <textarea
                   value={newPostContent}
                   onChange={e => setNewPostContent(e.target.value)}
-                  placeholder="Comparte ideas, anuncios o inicia la conversación…"
+                placeholder={t('forum.contentPlaceholder')}
                   className="w-full h-28 p-3 rounded bg-base-200 border border-base-300 focus:outline-none focus:border-primary"
                 />
                 <div className="text-right">
                   <Button onClick={handleCreatePost} disabled={!newPostTitle.trim() || !newPostContent.trim()}>
-                    Publicar
+                    {t('forum.publish')}
                   </Button>
                 </div>
               </div>
@@ -320,7 +333,7 @@ export const EventForumPage: React.FC = () => {
               <div className="space-y-4">
                 {posts.length === 0 && !loadingPosts && (
                   <div className="text-center py-10 text-gray-400 bg-base-100/40 rounded-xl border border-dashed border-base-300">
-                    Aún no hay publicaciones. Sé la primera persona en escribir.
+                    {t('forum.noPosts') ?? 'Aún no hay publicaciones. Sé la primera persona en escribir.'}
                   </div>
                 )}
 
@@ -356,7 +369,7 @@ export const EventForumPage: React.FC = () => {
                         <textarea
                           value={commentDrafts[post.id] ?? ''}
                           onChange={e => setCommentDrafts(prev => ({ ...prev, [post.id]: e.target.value }))}
-                          placeholder="Escribe un comentario"
+                          placeholder={t('forum.commentPlaceholder')}
                           className="w-full rounded-lg bg-base-100/80 border border-base-300 p-2 text-sm"
                           rows={3}
                         />
@@ -366,7 +379,7 @@ export const EventForumPage: React.FC = () => {
                             onClick={() => handleSendComment(post.id)}
                             disabled={!commentDrafts[post.id]?.trim()}
                           >
-                            Responder
+                            {t('forum.publish')}
                           </Button>
                         </div>
                       </div>
@@ -377,7 +390,7 @@ export const EventForumPage: React.FC = () => {
             </>
           ) : (
             <div className="text-center text-gray-400 py-16">
-              Selecciona un foro para comenzar a conversar.
+              {t('forum.selectForum')}
             </div>
           )}
         </section>

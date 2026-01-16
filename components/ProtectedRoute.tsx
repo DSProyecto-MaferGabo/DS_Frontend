@@ -1,6 +1,7 @@
-import React, { ReactElement, useEffect } from 'react';
+import React, { ReactElement, useEffect, useRef } from 'react';
 import { useKeycloak } from '../hooks/useKeycloak';
 import { Navigate, useLocation } from 'react-router-dom';
+import { createUserFromAuth } from '../services/api';
 
 interface ProtectedRouteProps {
   children: ReactElement;
@@ -12,6 +13,7 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, roles = [], loginRequired = false, privileges = [] }: ProtectedRouteProps) => {
   const { authenticated, keycloakInstance, isInitializing, permissions, profile } = useKeycloak();
   const location = useLocation();
+  const syncingRef = useRef(false);
 
   // DEBUG LOGS
   console.log('[ProtectedRoute] location:', location.pathname);
@@ -27,6 +29,26 @@ export const ProtectedRoute = ({ children, roles = [], loginRequired = false, pr
       keycloakInstance.login();
     }
   }, [isInitializing, loginRequired, authenticated, keycloakInstance]);
+
+  // Auto-sync user in Users-service using the current token (align externalId/sub)
+  useEffect(() => {
+    const syncUser = async () => {
+      if (!authenticated || !profile || syncingRef.current) return;
+      syncingRef.current = true;
+      try {
+        await createUserFromAuth({
+          Email: profile.email,
+          Role: profile.roles && profile.roles.length > 0 ? profile.roles : ['cliente'],
+          DisplayName: `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim(),
+        } as any);
+      } catch (err) {
+        console.warn('[ProtectedRoute] createUserFromAuth failed (non-blocking)', err);
+      } finally {
+        syncingRef.current = false;
+      }
+    };
+    syncUser();
+  }, [authenticated, profile]);
 
   if (isInitializing) {
     return <div className="flex items-center justify-center h-screen"><p className="text-xl">Verificando sesión...</p></div>;
@@ -52,11 +74,16 @@ export const ProtectedRoute = ({ children, roles = [], loginRequired = false, pr
       return <Navigate to="/" state={{ from: location }} replace />;
     }
     const userPrivileges = permissions?.privileges || [];
-    const hasPrivilege = userPrivileges.some(priv => privileges.includes(priv));
-    console.log('[ProtectedRoute] hasPrivilege:', hasPrivilege, 'userPrivileges:', userPrivileges);
-    if (!hasPrivilege) {
-      console.warn('[ProtectedRoute] Authenticated but missing required privilege, redirecting to /');
-      return <Navigate to="/" state={{ from: location }} replace />;
+    // If permissions are not yet loaded, allow and rely on role check above to guard access
+    if (userPrivileges.length > 0) {
+      const hasPrivilege = userPrivileges.some(priv => privileges.includes(priv));
+      console.log('[ProtectedRoute] hasPrivilege:', hasPrivilege, 'userPrivileges:', userPrivileges);
+      if (!hasPrivilege) {
+        console.warn('[ProtectedRoute] Authenticated but missing required privilege, redirecting to /');
+        return <Navigate to="/" state={{ from: location }} replace />;
+      }
+    } else {
+      console.warn('[ProtectedRoute] Privileges not loaded; allowing access based on roles');
     }
   }
   

@@ -97,7 +97,7 @@ export interface CreateForumPayload {
 function mapForum(dto: any): ForumTopic {
   return {
     id: Number(dto.id ?? dto.Id ?? dto.forumId ?? 0),
-    title: dto.title ?? dto.Title ?? 'Sin título',
+    title: (dto.title ?? dto.Title ?? dto.name ?? dto.Name ?? 'Sin título')?.toString().trim(),
     description: dto.description ?? dto.Description ?? '',
     eventId: dto.idEvent ?? dto.IdEvent ?? dto.eventId ?? dto.EventId ?? null,
     createdAt: dto.dateCreation ?? dto.DateCreation ?? dto.createdAt ?? dto.CreatedAt,

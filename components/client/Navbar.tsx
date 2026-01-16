@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import { Button } from '../ui/Button';
 import { LoginModal } from './LoginModal';
+import { availableLanguages, useI18n } from '../../i18n';
 
 const UserMenu = () => {
   const { keycloakInstance, profile } = useKeycloak();
@@ -41,6 +42,11 @@ const UserMenu = () => {
 export const Navbar = () => {
   const { authenticated } = useKeycloak();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { lang, setLang, t } = useI18n();
+
+  const handleLangChange = (code: string) => {
+    setLang(code);
+  };
 
   return (
     <>
@@ -53,8 +59,19 @@ export const Navbar = () => {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
+              <div className="hidden sm:flex items-center gap-1 text-gray-300">
+                {availableLanguages.map((l) => (
+                  <button
+                    key={l.code}
+                    onClick={() => handleLangChange(l.code)}
+                    className={`px-2 py-1 rounded text-xs ${lang === l.code ? 'bg-primary text-white' : 'hover:bg-base-300 hover:text-white'}`}
+                  >
+                    {l.label}
+                  </button>
+                ))}
+              </div>
               {!authenticated ? (
-                  <Button onClick={() => setIsModalOpen(true)} variant="primary" size="sm">Iniciar Sesión</Button>
+                  <Button onClick={() => setIsModalOpen(true)} variant="primary" size="sm">{t('nav.login')}</Button>
               ) : (
                   <UserMenu />
               )}

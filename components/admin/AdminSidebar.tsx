@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useKeycloak } from '../../hooks/useKeycloak';
+import { useI18n } from '../../i18n';
 import {
   CalendarIcon,
   UsersIcon,
@@ -26,26 +27,27 @@ type NavItem = {
 };
 
 const navItems: NavItem[] = [
-  { name: 'Panel Organizador', href: '/admin/organizador', icon: SparklesIcon, active: true, roles: ['administrador', 'organizador'] },
-  { name: 'Panel Soporte', href: '/admin/soporte', icon: ShieldCheckIcon, active: true, roles: ['administrador', 'soporte'] },
-  { name: 'Eventos', href: '/admin/eventos', icon: CalendarIcon, active: true, roles: ['administrador', 'organizador'] },
-  { name: 'Escenarios', href: '/admin/escenarios', icon: CalendarIcon, active: true, roles: ['administrador', 'organizador'] },
-  { name: 'Promociones', href: '/admin/promociones', icon: TicketIcon, active: true, roles: ['administrador', 'organizador'] },
-  { name: 'Usuarios', href: '/admin/usuarios', icon: UsersIcon, active: true, roles: ['administrador'] },
-  { name: 'Gestión Organizadores', href: '/admin/organizers', icon: UserPlusIcon, active: true, roles: ['administrador'] },
-  { name: 'Gestión Soporte', href: '/admin/support', icon: UserPlusIcon, active: true, roles: ['administrador'] },
-  { name: 'Servicios', href: '/admin/servicios', icon: CreditCardIcon, active: true, roles: ['administrador', 'organizador'] },
-  { name: 'Categorías', href: '/admin/categorias', icon: TagIcon, active: true, roles: ['administrador', 'organizador'] },
-  { name: 'Reservaciones', href: '/admin/reservaciones', icon: TicketIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
-  { name: 'Encuestas', href: '/admin/encuestas', icon: EnvelopeIcon, active: true, roles: ['administrador', 'organizador'] },
-  { name: 'Permisos', href: '/admin/permisos', icon: ClipboardDocumentListIcon, active: true },
-  { name: 'Pagos', href: '/admin/pagos', icon: CreditCardIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
-  { name: 'Reportes', href: '/admin/reportes', icon: ChartBarIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
-  { name: 'Foros', href: '/admin/foros', icon: ChatBubbleLeftRightIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
+  { name: 'sidebar.organizer', href: '/admin/organizador', icon: SparklesIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'sidebar.support', href: '/admin/soporte', icon: ShieldCheckIcon, active: true, roles: ['administrador', 'soporte', 'organizador'] },
+  { name: 'sidebar.events', href: '/admin/eventos', icon: CalendarIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'sidebar.eventRequests', href: '/admin/eventos/solicitudes', icon: ClipboardDocumentListIcon, active: true, roles: ['administrador', 'soporte'] },
+  { name: 'sidebar.stages', href: '/admin/escenarios', icon: CalendarIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'sidebar.promotions', href: '/admin/promociones', icon: TicketIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'sidebar.users', href: '/admin/usuarios', icon: UsersIcon, active: true, roles: ['administrador'] },
+  { name: 'sidebar.orgManagers', href: '/admin/organizers', icon: UserPlusIcon, active: true, roles: ['administrador'] },
+  { name: 'sidebar.supportManagers', href: '/admin/support', icon: UserPlusIcon, active: true, roles: ['administrador'] },
+  { name: 'sidebar.services', href: '/admin/servicios', icon: CreditCardIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'sidebar.categories', href: '/admin/categorias', icon: TagIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'sidebar.reservations', href: '/admin/reservaciones', icon: TicketIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
+  { name: 'sidebar.surveys', href: '/admin/encuestas', icon: EnvelopeIcon, active: true, roles: ['administrador', 'organizador'] },
+  { name: 'sidebar.payments', href: '/admin/pagos', icon: CreditCardIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
+  { name: 'sidebar.reports', href: '/admin/reportes', icon: ChartBarIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
+  { name: 'sidebar.forums', href: '/admin/foros', icon: ChatBubbleLeftRightIcon, active: true, roles: ['administrador', 'organizador', 'soporte'] },
 ];
 
 export const AdminSidebar = () => {
   const { profile, authenticated, keycloakInstance } = useKeycloak();
+  const { t } = useI18n();
   const roleSet = new Set(profile?.roles || []);
 
   const AuthGreeting = () => (
@@ -53,11 +55,11 @@ export const AdminSidebar = () => {
       {authenticated && profile ? (
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm">Hola, <span className="font-semibold">{profile.username || profile.firstName || 'User'}</span></div>
+            <div className="text-sm">{t('navbar.hello', { name: profile.username || profile.firstName || 'User' })}</div>
             <div className="text-xs text-gray-400">{(profile.roles || []).join(', ')}</div>
           </div>
           <div>
-            <button onClick={() => keycloakInstance.logout()} className="text-sm text-red-400 hover:text-red-300">Cerrar</button>
+            <button onClick={() => keycloakInstance.logout()} className="text-sm text-red-400 hover:text-red-300">{t('navbar.logout')}</button>
           </div>
         </div>
       ) : (
@@ -77,15 +79,14 @@ export const AdminSidebar = () => {
   return (
     <aside className="w-64 bg-base-200 p-4 flex flex-col h-screen fixed">
       <div className="px-2 mb-4">
-        <h2 className="text-2xl font-bold text-white">Admin Panel</h2>
-        <p className="text-sm text-gray-400">Gestión de Eventos</p>
+        <h2 className="text-2xl font-bold text-white">{t('navbar.adminPanel')}</h2>
+        <p className="text-sm text-gray-400">{t('admin.dashboardTitle')}</p>
       </div>
-      <div className="px-2 mb-6">
-        {/* Greeting + logout */}
+      <div className="px-2 mb-4">
         <AuthGreeting />
       </div>
-      <nav className="flex-grow">
-        <ul className="space-y-2">
+      <nav className="flex-grow overflow-y-auto pr-1">
+        <ul className="space-y-2 pb-4">
           {navItems.filter((item) => !item.roles || item.roles.some((role) => roleSet.has(role))).map((item) => (
             <li key={item.name}>
               <NavLink
@@ -94,19 +95,19 @@ export const AdminSidebar = () => {
                 onClick={(e) => !item.active && e.preventDefault()}
               >
                 <item.icon className="h-6 w-6 mr-3" />
-                <span>{item.name}</span>
+                <span>{t(item.name as any)}</span>
               </NavLink>
             </li>
           ))}
         </ul>
       </nav>
-      <div className="mt-auto">
+      <div className="mt-2">
         <NavLink
             to="/"
             className="flex items-center px-4 py-3 rounded-lg text-gray-300 hover:bg-base-300 hover:text-white"
             >
             <HomeIcon className="h-6 w-6 mr-3" />
-            <span>Volver al Sitio</span>
+            <span>{t('checkout.noSeats.backHome')}</span>
         </NavLink>
       </div>
     </aside>

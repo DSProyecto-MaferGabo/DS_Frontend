@@ -33,11 +33,28 @@ const EventRequestPage = () => {
   const [stagesLoading, setStagesLoading] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<number | ''>('');
   const [zones, setZones] = useState<(Partial<Zona> & { cantidad?: number })[]>([{ nombre: '', precio: 0, color: '#FF0000', cantidad: 10 }]);
+  const [previewSeats, setPreviewSeats] = useState<any[]>([]);
+  const [previewZonas, setPreviewZonas] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [generalPrice, setGeneralPrice] = useState<number>(0);
 
+  const selectedStage = React.useMemo(() => stages.find(s => Number(s.id ?? s.Id) === Number(selectedStageId)), [stages, selectedStageId]);
+  const stageCapacity = React.useMemo(() => {
+    const cap = selectedStage ? (selectedStage.peoplecapacity ?? selectedStage.PeopleCapacity ?? selectedStage.capacity ?? selectedStage.Capacity) : null;
+    return cap ? Number(cap) : null;
+  }, [selectedStage]);
+
   const handleBack = () => setCurrentStep(prev => Math.max(prev - 1, 1));
-  const handleNext = () => setCurrentStep(prev => Math.min(prev + 1, steps.length));
+  const handleNext = () => {
+    if (!isStreaming && currentStep === 2) {
+      const totalSeats = zones.reduce((acc, z) => acc + (Number(z.cantidad) || 0), 0);
+      if (stageCapacity && totalSeats > stageCapacity) {
+        alert(`La suma de asientos (${totalSeats}) no puede superar el aforo del escenario (${stageCapacity}). Ajusta las cantidades.`);
+        return;
+      }
+    }
+    setCurrentStep(prev => Math.min(prev + 1, steps.length));
+  };
 
   useEffect(() => {
     setCategoriesLoading(true);
@@ -54,6 +71,27 @@ const EventRequestPage = () => {
       .catch(err => { console.warn('Could not load stages:', err); setStages([]); })
       .finally(() => setStagesLoading(false));
   }, []);
+
+  // Cuando cambia el escenario, traer asientos existentes para preview
+  useEffect(() => {
+    const loadSeatsPreview = async () => {
+      if (!selectedStageId) {
+        setPreviewSeats([]);
+        setPreviewZonas([]);
+        return;
+      }
+      try {
+        const { seats, zonas } = await eventsApi.getSeats(Number(selectedStageId));
+        setPreviewSeats(seats || []);
+        setPreviewZonas(zonas || []);
+      } catch (err) {
+        console.warn('No se pudieron cargar asientos del escenario', err);
+        setPreviewSeats([]);
+        setPreviewZonas([]);
+      }
+    };
+    loadSeatsPreview();
+  }, [selectedStageId]);
 
   useEffect(() => {
     return () => {
@@ -104,6 +142,17 @@ const EventRequestPage = () => {
       alert('Completa todos los campos requeridos');
       return;
     }
+    if (!isStreaming && !eventInfo.hora) {
+      alert('Agrega la hora del evento.');
+      return;
+    }
+    if (!isStreaming) {
+      const totalSeats = zones.reduce((acc, z) => acc + (Number(z.cantidad) || 0), 0);
+      if (stageCapacity && totalSeats > stageCapacity) {
+        alert(`La suma de asientos (${totalSeats}) no puede superar el aforo del escenario (${stageCapacity}). Ajusta las cantidades.`);
+        return;
+      }
+    }
 
     // Check authentication
     if (!keycloakInstance?.authenticated) {
@@ -129,12 +178,14 @@ const EventRequestPage = () => {
         requestPayload.zones = [];
         requestPayload.generalPrice = generalPrice;
       } else {
-        requestPayload.zones = zones.map(z => ({
-          name: z.nombre,
-          price: z.precio,
-          seatCount: z.cantidad || 10,
-          color: z.color || '#FF0000'
-        }));
+        requestPayload.zones = zones
+          .filter(z => (z.nombre && z.nombre.trim()) || (z.cantidad && Number(z.cantidad) > 0))
+          .map((z, idx) => ({
+            name: z.nombre && z.nombre.trim().length > 0 ? z.nombre : `Zona ${idx + 1}`,
+            price: z.precio,
+            seatCount: Number(z.cantidad) || 10,
+            color: z.color || '#FF0000'
+          }));
       }
 
       await eventsApi.createEventRequest(requestPayload);
@@ -163,7 +214,7 @@ const EventRequestPage = () => {
       case 2:
         return <ZoneConfigStep data={zones} setData={setZones} />;
       case 3:
-        return <SeatDesignStep zones={zones} />;
+        return <SeatDesignStep zones={zones} previewSeats={previewSeats} previewZonas={previewZonas} />;
       default:
         return null;
     }
@@ -277,6 +328,16 @@ const EventInfoStep = ({
             type="date"
             value={data.fecha || ''}
             onChange={e => setData(prev => ({ ...prev, fecha: e.target.value }))}
+            className="w-full p-3 bg-base-200 rounded-lg"
+            required
+          />
+        </div>
+        <div>
+          <label className="block mb-2 font-semibold">Hora *</label>
+          <input
+            type="time"
+            value={(data as any).hora || ''}
+            onChange={e => setData(prev => ({ ...prev, hora: e.target.value }))}
             className="w-full p-3 bg-base-200 rounded-lg"
             required
           />
@@ -496,7 +557,42 @@ const ZoneConfigStep = ({
   );
 };
 
-const SeatDesignStep = ({ zones }: { zones: (Partial<Zona> & { cantidad?: number })[] }) => {
+const SeatDesignStep = ({
+  zones,
+  previewSeats,
+  previewZonas,
+}: {
+  zones: (Partial<Zona> & { cantidad?: number })[];
+  previewSeats: any[];
+  previewZonas: any[];
+}) => {
+  const hasPreview = previewSeats && previewSeats.length > 0;
+  const zonasMap = React.useMemo(() => {
+    const map: Record<number, any> = {};
+    (previewZonas || []).forEach((z: any) => { map[z.id] = z; });
+    return map;
+  }, [previewZonas]);
+
+  const syntheticSeats = React.useMemo(() => {
+    const seats: any[] = [];
+    zones.forEach((z, idx) => {
+      const total = Number(z.cantidad) || 0;
+      for (let i = 0; i < total; i++) {
+        const row = Math.floor(i / 10) + 1;
+        const num = (i % 10) + 1;
+        seats.push({
+          id: `${idx + 1}-${row}-${num}`,
+          zonaId: idx + 1,
+          fila: `R${row}`,
+          numero: num
+        });
+      }
+    });
+    return seats;
+  }, [zones]);
+
+  const seatsToShow = hasPreview ? previewSeats : syntheticSeats;
+
   return (
     <div>
       <h3 className="font-semibold text-lg mb-4">Diseñar Asientos</h3>
@@ -511,7 +607,33 @@ const SeatDesignStep = ({ zones }: { zones: (Partial<Zona> & { cantidad?: number
                 </div>
                 <div style={{ width: 32, height: 32, backgroundColor: z.color || '#FF0000' }} className="rounded" />
               </div>
-              <div className="mt-2 text-sm text-gray-600">Aquí puedes integrar un diseñador de asientos o un preview.</div>
+              {seatsToShow && seatsToShow.length > 0 ? (
+                <div className="mt-3 grid grid-cols-6 gap-1 text-xs">
+                  {seatsToShow
+                    .filter((s: any) => {
+                      if (hasPreview) {
+                        return s.zonaId === (zonasMap ? Object.keys(zonasMap).find(k => Number(k) === s.zonaId) : z.zonaId);
+                      }
+                      return s.zonaId === (i + 1);
+                    })
+                    .slice(0, 90) // cap preview to avoid huge grids
+                    .map((s: any) => (
+                      <div
+                        key={s.id ?? `${s.zonaId}-${s.fila}-${s.numero}`}
+                        className="rounded px-2 py-1 text-center"
+                        style={{ backgroundColor: z.color || '#FF0000', opacity: 0.8 }}
+                        title={`Fila ${s.fila} · #${s.numero}`}
+                      >
+                        {s.fila}-{s.numero}
+                      </div>
+                    ))}
+                  {seatsToShow.filter((s: any) => hasPreview ? s.zonaId === (zonasMap ? Object.keys(zonasMap).find(k => Number(k) === s.zonaId) : z.zonaId) : s.zonaId === (i + 1)).length > 90 && (
+                    <div className="text-[10px] text-gray-400 col-span-6">Vista truncada (más de 90 asientos)</div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-2 text-sm text-gray-600">Sin asientos cargados para el escenario seleccionado. Usa la cantidad configurada como referencia.</div>
+              )}
             </div>
           ))}
         </div>

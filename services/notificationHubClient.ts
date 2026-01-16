@@ -1,7 +1,11 @@
 import * as signalR from '@microsoft/signalr';
 import keycloak from './keycloakService';
 
-const HUB_URL = import.meta.env.VITE_SIGNALR_NOTIFICATIONS_HUB || 'http://localhost:5197/hubs/notifications';
+// Prefer explicit env; fallback to Reservations.API hub (seat signals se emiten desde allí).
+const HUB_URL =
+  import.meta.env.VITE_SIGNALR_NOTIFICATIONS_HUB ||
+  import.meta.env.VITE_RESERVATIONS_SIGNALR_HUB ||
+  'http://localhost:5234/hub/reservations';
 
 let connection: signalR.HubConnection | null = null;
 let startingPromise: Promise<signalR.HubConnection> | null = null;
@@ -11,6 +15,13 @@ export interface SeatUpdatePayload {
   seatCode?: string;
   status?: string;
   metadata?: Record<string, unknown> | null;
+}
+
+export interface SeatHoldPayload {
+  eventoId?: number;
+  token?: string;
+  expiresAt?: string;
+  seats?: Array<{ asientoId?: number; precio?: number }>;
 }
 
 export interface ForumPostPayload {
@@ -30,8 +41,20 @@ export interface ServiceStatusPayload {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface SurveyInvitationPayload {
+  invitationId?: number;
+  eventId?: number;
+  surveyUrl?: string;
+  message?: string;
+  metadata?: Record<string, unknown> | null;
+}
+
 async function startConnection() {
   if (connection && connection.state === signalR.HubConnectionState.Connected) {
+    return connection;
+  }
+
+  if (connection && (connection.state === signalR.HubConnectionState.Connecting || connection.state === signalR.HubConnectionState.Reconnecting)) {
     return connection;
   }
 
@@ -74,7 +97,7 @@ async function startConnection() {
 
 export async function ensureNotificationHubConnection(): Promise<signalR.HubConnection> {
   const conn = await startConnection();
-  if (conn.state !== signalR.HubConnectionState.Connected) {
+  if (conn.state === signalR.HubConnectionState.Disconnected) {
     try {
       await conn.start();
     } catch (err) {
@@ -167,6 +190,33 @@ export async function registerSeatUpdateHandler(handler: (payload: SeatUpdatePay
   };
 }
 
+export async function registerSeatHoldCreatedHandler(handler: (payload: SeatHoldPayload) => void) {
+  const conn = await ensureNotificationHubConnection();
+  const bound = (payload: SeatHoldPayload) => handler(payload);
+  conn.on('SeatHoldCreated', bound);
+  return () => {
+    conn.off('SeatHoldCreated', bound);
+  };
+}
+
+export async function registerSeatHoldReleasedHandler(handler: (payload: SeatHoldPayload) => void) {
+  const conn = await ensureNotificationHubConnection();
+  const bound = (payload: SeatHoldPayload) => handler(payload);
+  conn.on('SeatHoldReleased', bound);
+  return () => {
+    conn.off('SeatHoldReleased', bound);
+  };
+}
+
+export async function registerSeatHoldExpiredHandler(handler: (payload: SeatHoldPayload) => void) {
+  const conn = await ensureNotificationHubConnection();
+  const bound = (payload: SeatHoldPayload) => handler(payload);
+  conn.on('SeatHoldExpired', bound);
+  return () => {
+    conn.off('SeatHoldExpired', bound);
+  };
+}
+
 export async function registerForumPostHandler(handler: (payload: ForumPostPayload) => void) {
   const conn = await ensureNotificationHubConnection();
   const bound = (payload: ForumPostPayload) => handler(payload);
@@ -182,6 +232,15 @@ export async function registerServiceStatusHandler(handler: (payload: ServiceSta
   conn.on('ReceiveServiceStatus', bound);
   return () => {
     conn.off('ReceiveServiceStatus', bound);
+  };
+}
+
+export async function registerSurveyInvitationHandler(handler: (payload: SurveyInvitationPayload) => void) {
+  const conn = await ensureNotificationHubConnection();
+  const bound = (payload: SurveyInvitationPayload) => handler(payload);
+  conn.on('ReceiveSurveyInvitation', bound);
+  return () => {
+    conn.off('ReceiveSurveyInvitation', bound);
   };
 }
 

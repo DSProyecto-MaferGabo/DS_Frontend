@@ -15,6 +15,7 @@ import { CheckoutPage } from './pages/client/CheckoutPage';
 import { UserProfile } from './pages/client/UserProfile';
 import { PaymentPage } from './pages/client/PaymentPage';
 import { EventForumPage } from './pages/client/EventForumPage';
+import SurveyLinkPage from './pages/SurveyLinkPage';
 
 // Admin Pages
 import { EventManagementPage } from './pages/admin/EventManagementPage';
@@ -33,10 +34,12 @@ import CategoryEventsPage from './pages/admin/CategoryEventsPage';
 import OrganizerDashboardPage from './pages/admin/OrganizerDashboardPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import SupportDashboardPage from './pages/admin/SupportDashboardPage';
+import SupportTicketsPage from './pages/admin/SupportTicketsPage';
 import { OrganizerAccountsPage, SupportAccountsPage } from './pages/admin/ManagedAccountsPage';
 import SurveyInvitationsPage from './pages/admin/SurveyInvitationsPage';
 import ForumMonitorPage from './pages/admin/ForumMonitorPage';
 import EventRequestPage from './pages/admin/EventRequestPage';
+import EventRequestsAdminPage from './pages/admin/EventRequestsAdminPage';
 
 export const Router = () => {
     const { isInitializing } = useKeycloak();
@@ -51,7 +54,8 @@ export const Router = () => {
             <Route path="/" element={<ClientLayout />}>
                 <Route index element={<HomePage />} />
                 <Route path="evento/:id" element={<EventDetailPage />} />
-                
+                {/* Ruta pública para responder encuestas vía enlace */}
+                <Route path="survey" element={<SurveyLinkPage />} />
                 {/* FIX: Explicitly pass children to ProtectedRoute to fix type error */}
                 <Route path="evento/:id/asientos" element={
                     <ProtectedRoute loginRequired children={<SeatSelectionPage />} />
@@ -88,7 +92,7 @@ export const Router = () => {
                     <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN']} children={<OrganizerDashboardPage />} />
                 } />
                 <Route path="soporte" element={
-                    <ProtectedRoute roles={['soporte', 'administrador']} privileges={['PLATFORM_VIEW_DASHBOARD', 'LOGS_VIEW']} children={<SupportDashboardPage />} />
+                    <ProtectedRoute roles={['soporte', 'administrador', 'organizador']} children={<SupportTicketsPage />} />
                 } />
                 <Route path="eventos" element={
                     <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN', 'EVENT_MANAGE_ALL']} children={<EventManagementPage />} />
@@ -97,7 +101,10 @@ export const Router = () => {
                     <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_CREATE']} children={<EventCreationPage />} />
                 } />
                 <Route path="eventos/solicitar" element={
-                    <EventRequestPage />
+                    <ProtectedRoute roles={['organizador', 'administrador', 'soporte']} privileges={['EVENT_CREATE', 'EVENT_MANAGE_ALL', 'EVENT_MANAGE_OWN']} children={<EventRequestPage />} />
+                } />
+                <Route path="eventos/solicitudes" element={
+                    <ProtectedRoute roles={['administrador', 'soporte']} privileges={['EVENT_MANAGE_ALL']} children={<EventRequestsAdminPage />} />
                 } />
                 <Route path="eventos/:id/editar" element={
                     <ProtectedRoute roles={['organizador', 'administrador']} privileges={['EVENT_MANAGE_OWN', 'EVENT_MANAGE_ALL']} children={<EventEditPage />} />

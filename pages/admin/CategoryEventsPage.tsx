@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import eventsApi from '../../services/eventsApi';
 import { Button } from '../../components/ui/Button';
+import { useKeycloak } from '../../hooks/useKeycloak';
 
 const CategoryEventsPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { keycloakInstance, profile } = useKeycloak();
   const [events, setEvents] = useState<any[]>([]);
   const [category, setCategory] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
@@ -15,7 +17,10 @@ const CategoryEventsPage = () => {
       if (!id) return;
       setLoading(true);
       try {
-        const all = await eventsApi.getEvents();
+        // Solo organizador: ver sus eventos; Admin: todos
+        const isAdmin = keycloakInstance.hasRealmRole('administrador');
+        const isOrganizer = keycloakInstance.hasRealmRole('organizador');
+        const all = isAdmin ? await eventsApi.getEvents() : await eventsApi.getMyEvents();
         const filtered = (all || []).filter((e: any) => Number(e.categoryId) === Number(id));
         setEvents(filtered);
         // try to get category info

@@ -3,6 +3,9 @@ import { Link } from 'react-router-dom';
 import type { Evento, EventFormat } from '../../types';
 import { CalendarIcon, MapPinIcon } from '@heroicons/react/24/solid';
 
+const MEDIA_PUBLIC_BASE = import.meta.env.VITE_MEDIA_PUBLIC_BASE_URL || '';
+const POSTER_FALLBACK = 'https://picsum.photos/seed/ds-poster/720/480';
+
 interface EventCardProps {
   evento: Evento;
 }
@@ -59,11 +62,18 @@ export const EventCard: React.FC<EventCardProps> = ({ evento }) => {
 
   const eventFormat = ((evento as any).eventFormat ?? 'presencial') as EventFormat;
 
+  const resolvePosterUrl = () => {
+    const poster = (evento as any).posterUrl || (evento as any).PosterUrl || (evento as any).poster || '';
+    if (poster && /^https?:\/\//i.test(poster)) return poster;
+    if (poster && MEDIA_PUBLIC_BASE) return `${MEDIA_PUBLIC_BASE.replace(/\/+$/, '')}/${poster.replace(/^\/+/, '')}`;
+    return POSTER_FALLBACK;
+  };
+
   return (
     <Link to={`/evento/${evento.id}`} className="block group">
       <div className="bg-base-200 rounded-lg overflow-hidden shadow-lg hover:shadow-primary/50 transition-all duration-300 transform hover:-translate-y-1 flex flex-col h-full">
         <div className="relative">
-            <img className="w-full h-80 object-cover" src={evento.posterUrl} alt={evento.nombre} />
+            <img className="w-full h-80 object-cover" src={resolvePosterUrl()} alt={evento.nombre} />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
             <span className={`absolute top-3 left-3 z-10 text-xs tracking-wide font-semibold px-3 py-1 rounded-full shadow ${FORMAT_BADGE_CLASSES[eventFormat]}`}>
               {FORMAT_LABELS[eventFormat]}

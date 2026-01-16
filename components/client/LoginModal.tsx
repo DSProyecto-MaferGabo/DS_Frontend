@@ -2,6 +2,7 @@ import React from 'react';
 import { useKeycloak } from '../../hooks/useKeycloak';
 import { Button } from '../ui/Button';
 import { XMarkIcon } from '@heroicons/react/24/solid';
+import { useI18n } from '../../i18n';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -10,6 +11,7 @@ interface LoginModalProps {
 
 export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
   const { keycloakInstance } = useKeycloak();
+  const { t } = useI18n();
 
   if (!isOpen) {
     return null;
@@ -40,11 +42,11 @@ export const LoginModal = ({ isOpen, onClose }: LoginModalProps) => {
             <XMarkIcon className="h-6 w-6" />
         </button>
         <div className="text-center">
-            <h2 className="text-2xl font-bold text-white mb-2">Inicia Sesión</h2>
-            <p className="text-gray-400 mb-6">Para comprar entradas y acceder a tu perfil.</p>
+            <h2 className="text-2xl font-bold text-white mb-2">{t('login.title')}</h2>
+            <p className="text-gray-400 mb-6">{t('login.subtitle')}</p>
             <div className="space-y-4">
          <Button onClick={() => handleLogin(false)} variant="primary" size="lg" className="w-full">
-          Iniciar Sesión con Keycloak
+          {t('login.btn')}
         </Button>
             </div>
         </div>
